@@ -95,11 +95,16 @@ class BannedSellersStorage:
         return False
 
 DISPLAY_DEFAULTS = {
-    "bestchange": {
-        "mode": "positions", "value": [1, 10],
+    "bestchange_1": {
+        "mode": "positions", "value": [1, 5, 10],
         "payment": "sberbank", "coin": "tether-bep20",
     },
-    "bybit": {"mode": "sequential", "value": 10, "max_amount": 100000},
+    "bestchange_2": {
+        "mode": "positions", "value": [1, 5, 10],
+        "payment": "vtb", "coin": "tether-bep20",
+    },
+    "bybit_1": {"mode": "sequential", "value": 5, "max_amount": 100000},
+    "bybit_2": {"mode": "sequential", "value": 5, "max_amount": 50000},
 }
 
 
@@ -153,10 +158,10 @@ class UserSettingsStorage:
         self._write_data(data)
 
     def get_all_settings(self, user_id: int) -> dict:
-        """Возвращает настройки пользователя для обеих бирж (с дефолтами)."""
+        """Возвращает настройки пользователя для всех бирж (с дефолтами)."""
         return {
-            "bestchange": self.get_exchange_settings(user_id, "bestchange"),
-            "bybit": self.get_exchange_settings(user_id, "bybit"),
+            key: self.get_exchange_settings(user_id, key)
+            for key in DISPLAY_DEFAULTS
         }
 
 

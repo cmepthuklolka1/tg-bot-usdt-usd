@@ -7,7 +7,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
 from ..config import config
-from ..domain.models import ExchangeRateReport
+from ..domain.models import ExchangeRateReport, RateSection
 from ..keyboards.menus import (
     get_main_menu_keyboard, get_rates_keyboard,
     get_settings_exchange_keyboard, get_settings_mode_keyboard, get_settings_input_keyboard,
@@ -27,8 +27,10 @@ storage = WhitelistStorage()
 settings_storage = UserSettingsStorage()
 
 EXCHANGE_LABELS = {
-    "bestchange": "BestChange",
-    "bybit": "Bybit P2P",
+    "bestchange_1": "BestChange-1",
+    "bestchange_2": "BestChange-2",
+    "bybit_1": "Bybit P2P-1",
+    "bybit_2": "Bybit P2P-2",
 }
 
 PAYMENT_SLUGS = {
@@ -59,6 +61,13 @@ class SettingsStates(StatesGroup):
 
 
 # ─── Helpers ──────────────────────────────────────────────────
+
+def _is_bc(exchange: str) -> bool:
+    return exchange.startswith("bestchange")
+
+def _is_bybit(exchange: str) -> bool:
+    return exchange.startswith("bybit")
+
 
 async def _get_actual_pinned_id(bot, chat_id: int) -> int | None:
     """Возвращает message_id реально закреплённого сообщения в Telegram, или None."""
@@ -110,13 +119,13 @@ def _format_settings_text(user_id: int) -> str:
             desc = f"первые {value}"
         else:
             desc = f"позиции {', '.join(str(v) for v in value)}"
-        if exchange == "bestchange":
+        if _is_bc(exchange):
             payment = s.get("payment", "sberbank")
             coin = s.get("coin", "tether-bep20")
             pay_label = PAYMENT_SLUGS.get(payment, payment)
             coin_label = COIN_SLUGS.get(coin, coin)
             lines.append(f"<b>{label}:</b> {pay_label} → {coin_label}, {desc}")
-        else:
+        elif _is_bybit(exchange):
             max_amount = s.get("max_amount", 100000)
             amount_label = _format_amount_label(max_amount)
             lines.append(f"<b>{label}:</b> [{amount_label}], {desc}")
@@ -131,9 +140,10 @@ def _format_amount_label(amount: int) -> str:
     return f"{amount // 1000}K"
 
 
-def _format_bc_menu_text(user_id: int) -> str:
+def _format_bc_menu_text(user_id: int, exchange: str) -> str:
     """Форматирует текст суб-меню BestChange с текущими настройками."""
-    s = settings_storage.get_exchange_settings(user_id, "bestchange")
+    label = EXCHANGE_LABELS.get(exchange, exchange)
+    s = settings_storage.get_exchange_settings(user_id, exchange)
     payment = s.get("payment", "sberbank")
     coin = s.get("coin", "tether-bep20")
     mode = s.get("mode", "positions")
@@ -145,16 +155,17 @@ def _format_bc_menu_text(user_id: int) -> str:
     else:
         display_desc = f"позиции {', '.join(str(v) for v in value)}"
     return (
-        f"<b>📈 BestChange — настройки</b>\n\n"
+        f"<b>📈 {label} — настройки</b>\n\n"
         f"Источник: <b>{pay_label} → {coin_label}</b>\n"
         f"Выдача: <b>{display_desc}</b>\n\n"
         f"Что хотите изменить?"
     )
 
 
-def _format_bybit_menu_text(user_id: int) -> str:
+def _format_bybit_menu_text(user_id: int, exchange: str) -> str:
     """Форматирует текст суб-меню Bybit P2P с текущими настройками."""
-    s = settings_storage.get_exchange_settings(user_id, "bybit")
+    label = EXCHANGE_LABELS.get(exchange, exchange)
+    s = settings_storage.get_exchange_settings(user_id, exchange)
     max_amount = s.get("max_amount", 100000)
     mode = s.get("mode", "sequential")
     value = s.get("value", 10)
@@ -164,7 +175,7 @@ def _format_bybit_menu_text(user_id: int) -> str:
     else:
         display_desc = f"позиции {', '.join(str(v) for v in value)}"
     return (
-        f"<b>💰 Bybit P2P — настройки</b>\n\n"
+        f"<b>💰 {label} — настройки</b>\n\n"
         f"Сумма сделки: <b>{amount_label}</b>\n"
         f"Выдача: <b>{display_desc}</b>\n\n"
         f"Что хотите изменить?"
@@ -175,14 +186,6 @@ def _format_bybit_menu_text(user_id: int) -> str:
 
 async def generate_rates_report(user_id: int | None = None) -> str:
     """Fetches all rates and returns the formatted telegram message."""
-    # Загружаем настройки пользователя
-    if user_id:
-        bc_settings = settings_storage.get_exchange_settings(user_id, "bestchange")
-        by_settings = settings_storage.get_exchange_settings(user_id, "bybit")
-    else:
-        bc_settings = DISPLAY_DEFAULTS["bestchange"]
-        by_settings = DISPLAY_DEFAULTS["bybit"]
-
     try:
         cbrf = await fetch_usd_rub_rate()
         cbrf_rate = cbrf.usd_rub
@@ -190,39 +193,48 @@ async def generate_rates_report(user_id: int | None = None) -> str:
         logger.error(f"Generate report CBRF error: {e}")
         cbrf_rate = 0.0
 
-    bc_payment = bc_settings.get("payment", "sberbank")
-    bc_coin = bc_settings.get("coin", "tether-bep20")
+    sections: list[RateSection] = []
 
-    bestchange_items: list[tuple[int, str]] = []
-    try:
-        bc = await fetch_bestchange_rates(payment=bc_payment, coin=bc_coin)
-        bestchange_items = _apply_display_settings(bc.offers, bc_settings, _format_bc_line)
-    except Exception as e:
-        logger.error(f"Generate report BestChange error: {e}")
+    # BestChange-1, BestChange-2
+    for key in ("bestchange_1", "bestchange_2"):
+        if user_id:
+            s = settings_storage.get_exchange_settings(user_id, key)
+        else:
+            s = DISPLAY_DEFAULTS[key]
+        bc_payment = s.get("payment", "sberbank")
+        bc_coin = s.get("coin", "tether-bep20")
+        items: list[tuple[int, str]] = []
+        try:
+            bc = await fetch_bestchange_rates(payment=bc_payment, coin=bc_coin)
+            items = _apply_display_settings(bc.offers, s, _format_bc_line)
+        except Exception as e:
+            logger.error(f"Generate report {key} error: {e}")
+        pay_label = PAYMENT_SLUGS.get(bc_payment, bc_payment)
+        coin_label = COIN_SLUGS.get(bc_coin, bc_coin)
+        label = f"BestChange ({pay_label} → {coin_label})"
+        sections.append(RateSection(label=label, items=items))
 
-    pay_label = PAYMENT_SLUGS.get(bc_payment, bc_payment)
-    coin_label = COIN_SLUGS.get(bc_coin, bc_coin)
-    bc_label = f"BestChange ({pay_label} → {coin_label})"
-
-    by_max_amount = by_settings.get("max_amount", 100000)
-
-    bybit_items: list[tuple[int, str]] = []
-    try:
-        bybit = await fetch_bybit_p2p_rates(min_amount=float(by_max_amount))
-        bybit_items = _apply_display_settings(bybit, by_settings, _format_bybit_line)
-    except Exception as e:
-        logger.error(f"Generate report Bybit error: {e}")
-
-    amount_label = _format_amount_label(by_max_amount)
-    bybit_label = f"Bybit P2P (USDT/RUB) [{amount_label}]"
+    # Bybit P2P-1, Bybit P2P-2
+    for key in ("bybit_1", "bybit_2"):
+        if user_id:
+            s = settings_storage.get_exchange_settings(user_id, key)
+        else:
+            s = DISPLAY_DEFAULTS[key]
+        by_max_amount = s.get("max_amount", 100000)
+        items = []
+        try:
+            bybit = await fetch_bybit_p2p_rates(min_amount=float(by_max_amount))
+            items = _apply_display_settings(bybit, s, _format_bybit_line)
+        except Exception as e:
+            logger.error(f"Generate report {key} error: {e}")
+        amount_label = _format_amount_label(by_max_amount)
+        bybit_label = f"Bybit P2P (USDT/RUB) [{amount_label}]"
+        sections.append(RateSection(label=bybit_label, items=items))
 
     report = ExchangeRateReport(
         cbrf_rate=cbrf_rate,
-        bestchange_label=bc_label,
-        bybit_label=bybit_label,
-        bestchange_items=bestchange_items,
-        bybit_items=bybit_items,
-        timestamp=datetime.now()
+        sections=sections,
+        timestamp=datetime.now(),
     )
     return report.format_for_telegram()
 
@@ -412,35 +424,32 @@ async def cb_settings_menu(callback: CallbackQuery, state: FSMContext):
     await _edit_or_send(callback, text, get_settings_exchange_keyboard())
 
 
-@router.callback_query(F.data.in_({"settings_bestchange", "settings_bybit"}))
+@router.callback_query(F.data.in_({"settings_bestchange_1", "settings_bestchange_2", "settings_bybit_1", "settings_bybit_2"}))
 async def cb_settings_exchange(callback: CallbackQuery, state: FSMContext):
     if not storage.is_allowed(callback.from_user.id):
         await callback.answer("Нет доступа.", show_alert=True)
         return
 
-    exchange = "bestchange" if callback.data == "settings_bestchange" else "bybit"
-    label = EXCHANGE_LABELS[exchange]
+    exchange = callback.data.removeprefix("settings_")
 
     # Сохраняем ID этого сообщения — в него будем редактировать после ввода текста
     await state.update_data(exchange=exchange, settings_msg_id=callback.message.message_id)
     await callback.answer()
 
-    current = settings_storage.get_exchange_settings(callback.from_user.id, exchange)
-
-    if exchange == "bestchange":
+    if _is_bc(exchange):
         # BestChange: показываем суб-меню с выбором раздела
         await state.set_state(SettingsStates.choosing_bc_section)
         await _edit_or_send(
             callback,
-            _format_bc_menu_text(callback.from_user.id),
+            _format_bc_menu_text(callback.from_user.id, exchange),
             get_settings_bc_menu_keyboard(),
         )
-    else:
+    elif _is_bybit(exchange):
         # Bybit: показываем суб-меню с выбором раздела
         await state.set_state(SettingsStates.choosing_bybit_section)
         await _edit_or_send(
             callback,
-            _format_bybit_menu_text(callback.from_user.id),
+            _format_bybit_menu_text(callback.from_user.id, exchange),
             get_settings_bybit_menu_keyboard(),
         )
 
@@ -449,7 +458,9 @@ async def cb_settings_exchange(callback: CallbackQuery, state: FSMContext):
 async def cb_settings_bc_section(callback: CallbackQuery, state: FSMContext):
     """Обрабатывает выбор раздела настроек BestChange: источник данных или выдача."""
     await callback.answer()
-    current = settings_storage.get_exchange_settings(callback.from_user.id, "bestchange")
+    data = await state.get_data()
+    exchange = data.get("exchange", "bestchange_1")
+    current = settings_storage.get_exchange_settings(callback.from_user.id, exchange)
 
     if callback.data == "bc_section_source":
         # → выбор банка
@@ -457,10 +468,11 @@ async def cb_settings_bc_section(callback: CallbackQuery, state: FSMContext):
         coin = current.get("coin", "tether-bep20")
         pay_label = PAYMENT_SLUGS.get(payment, payment)
         coin_label = COIN_SLUGS.get(coin, coin)
+        label = EXCHANGE_LABELS.get(exchange, exchange)
         await state.set_state(SettingsStates.choosing_bc_payment)
         await _edit_or_send(
             callback,
-            f"<b>BestChange — источник данных</b>\nТекущий: {pay_label} → {coin_label}\n\nВыберите банк:",
+            f"<b>{label} — источник данных</b>\nТекущий: {pay_label} → {coin_label}\n\nВыберите банк:",
             get_settings_bc_payment_keyboard(),
         )
     else:
@@ -468,10 +480,11 @@ async def cb_settings_bc_section(callback: CallbackQuery, state: FSMContext):
         mode = current.get("mode", "positions")
         value = current.get("value", [1, 10])
         current_desc = f"первые {value}" if mode == "sequential" else f"позиции {', '.join(str(v) for v in value)}"
+        label = EXCHANGE_LABELS.get(exchange, exchange)
         await state.set_state(SettingsStates.choosing_mode)
         await _edit_or_send(
             callback,
-            f"<b>BestChange — выдача</b>\nТекущая настройка: {current_desc}\n\nВыберите режим отображения:",
+            f"<b>{label} — выдача</b>\nТекущая настройка: {current_desc}\n\nВыберите режим отображения:",
             get_settings_mode_keyboard(),
         )
 
@@ -483,15 +496,17 @@ async def cb_settings_bc_payment(callback: CallbackQuery, state: FSMContext):
     await state.set_state(SettingsStates.choosing_bc_coin)
     await callback.answer()
 
-    pay_label = PAYMENT_SLUGS.get(payment, payment)
-    current = settings_storage.get_exchange_settings(callback.from_user.id, "bestchange")
     data = await state.get_data()
+    exchange = data.get("exchange", "bestchange_1")
+    pay_label = PAYMENT_SLUGS.get(payment, payment)
+    current = settings_storage.get_exchange_settings(callback.from_user.id, exchange)
     coin = data.get("coin") or current.get("coin", "tether-bep20")
     coin_label = COIN_SLUGS.get(coin, coin)
+    label = EXCHANGE_LABELS.get(exchange, exchange)
 
     await _edit_or_send(
         callback,
-        f"<b>BestChange — источник данных</b>\nБанк: {pay_label}\nТекущий актив: {coin_label}\n\nВыберите актив:",
+        f"<b>{label} — источник данных</b>\nБанк: {pay_label}\nТекущий актив: {coin_label}\n\nВыберите актив:",
         get_settings_bc_coin_keyboard(),
     )
 
@@ -503,12 +518,13 @@ async def cb_settings_bc_coin(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
     data = await state.get_data()
+    exchange = data.get("exchange", "bestchange_1")
     payment = data.get("payment", "sberbank")
 
     # Сохраняем только источник (payment+coin); mode/value берутся из существующих настроек
-    existing = settings_storage.get_exchange_settings(callback.from_user.id, "bestchange")
+    existing = settings_storage.get_exchange_settings(callback.from_user.id, exchange)
     settings_storage.set_exchange_settings(
-        callback.from_user.id, "bestchange",
+        callback.from_user.id, exchange,
         mode=existing.get("mode", "positions"),
         value=existing.get("value", [1, 10]),
         payment=payment, coin=coin,
@@ -521,7 +537,7 @@ async def cb_settings_bc_coin(callback: CallbackQuery, state: FSMContext):
     await _edit_or_send(
         callback,
         f"✅ Источник сохранён: <b>{pay_label} → {coin_label}</b>\n\n"
-        + _format_bc_menu_text(callback.from_user.id),
+        + _format_bc_menu_text(callback.from_user.id, exchange),
         get_settings_bc_menu_keyboard(),
     )
 
@@ -530,7 +546,10 @@ async def cb_settings_bc_coin(callback: CallbackQuery, state: FSMContext):
 async def cb_settings_bybit_section(callback: CallbackQuery, state: FSMContext):
     """Обрабатывает выбор раздела настроек Bybit: сумма сделки или выдача."""
     await callback.answer()
-    current = settings_storage.get_exchange_settings(callback.from_user.id, "bybit")
+    data = await state.get_data()
+    exchange = data.get("exchange", "bybit_1")
+    current = settings_storage.get_exchange_settings(callback.from_user.id, exchange)
+    label = EXCHANGE_LABELS.get(exchange, exchange)
 
     if callback.data == "bybit_section_amount":
         # → выбор суммы сделки
@@ -538,7 +557,7 @@ async def cb_settings_bybit_section(callback: CallbackQuery, state: FSMContext):
         amount_label = _format_amount_label(max_amount)
         await _edit_or_send(
             callback,
-            f"<b>Bybit P2P — сумма сделки</b>\n"
+            f"<b>{label} — сумма сделки</b>\n"
             f"Текущая: <b>{amount_label}</b>\n\n"
             f"Выберите минимальную сумму сделки:",
             get_settings_bybit_amount_keyboard(),
@@ -551,7 +570,7 @@ async def cb_settings_bybit_section(callback: CallbackQuery, state: FSMContext):
         await state.set_state(SettingsStates.choosing_mode)
         await _edit_or_send(
             callback,
-            f"<b>Bybit P2P — выдача</b>\nТекущая настройка: {current_desc}\n\nВыберите режим отображения:",
+            f"<b>{label} — выдача</b>\nТекущая настройка: {current_desc}\n\nВыберите режим отображения:",
             get_settings_mode_keyboard(),
         )
 
@@ -561,11 +580,14 @@ async def cb_settings_bybit_amount_custom(callback: CallbackQuery, state: FSMCon
     """Переходит к ручному вводу суммы сделки."""
     await callback.answer()
     await state.set_state(SettingsStates.waiting_for_bybit_amount)
-    current = settings_storage.get_exchange_settings(callback.from_user.id, "bybit")
+    data = await state.get_data()
+    exchange = data.get("exchange", "bybit_1")
+    current = settings_storage.get_exchange_settings(callback.from_user.id, exchange)
     current_label = _format_amount_label(current.get("max_amount", 100000))
+    label = EXCHANGE_LABELS.get(exchange, exchange)
     await _edit_or_send(
         callback,
-        f"<b>Bybit P2P — сумма сделки</b>\n"
+        f"<b>{label} — сумма сделки</b>\n"
         f"Текущая: <b>{current_label}</b>\n\n"
         f"Введите сумму в рублях (целое число, минимум 1000):\n"
         f"Например: <b>150000</b>",
@@ -579,10 +601,13 @@ async def cb_settings_bybit_amount(callback: CallbackQuery, state: FSMContext):
     amount = int(callback.data.removeprefix("bybit_amount_"))
     await callback.answer()
 
+    data = await state.get_data()
+    exchange = data.get("exchange", "bybit_1")
+
     # Сохраняем только max_amount; mode/value берутся из существующих настроек
-    existing = settings_storage.get_exchange_settings(callback.from_user.id, "bybit")
+    existing = settings_storage.get_exchange_settings(callback.from_user.id, exchange)
     settings_storage.set_exchange_settings(
-        callback.from_user.id, "bybit",
+        callback.from_user.id, exchange,
         mode=existing.get("mode", "sequential"),
         value=existing.get("value", 10),
         max_amount=amount,
@@ -593,7 +618,7 @@ async def cb_settings_bybit_amount(callback: CallbackQuery, state: FSMContext):
     await _edit_or_send(
         callback,
         f"✅ Сумма сохранена: <b>{amount_label}</b>\n\n"
-        + _format_bybit_menu_text(callback.from_user.id),
+        + _format_bybit_menu_text(callback.from_user.id, exchange),
         get_settings_bybit_menu_keyboard(),
     )
 
@@ -608,6 +633,7 @@ async def process_bybit_amount_value(message: Message, state: FSMContext):
 
     data = await state.get_data()
     settings_msg_id = data.get("settings_msg_id")
+    exchange = data.get("exchange", "bybit_1")
 
     async def show_error(err: str):
         prompt = (
@@ -638,9 +664,9 @@ async def process_bybit_amount_value(message: Message, state: FSMContext):
         await show_error("❌ Максимальная сумма — <b>100 000 000 ₽</b>.")
         return
 
-    existing = settings_storage.get_exchange_settings(message.from_user.id, "bybit")
+    existing = settings_storage.get_exchange_settings(message.from_user.id, exchange)
     settings_storage.set_exchange_settings(
-        message.from_user.id, "bybit",
+        message.from_user.id, exchange,
         mode=existing.get("mode", "sequential"),
         value=existing.get("value", 10),
         max_amount=amount,
@@ -650,7 +676,7 @@ async def process_bybit_amount_value(message: Message, state: FSMContext):
     await state.set_state(SettingsStates.choosing_bybit_section)
     confirm_text = (
         f"✅ Сумма сохранена: <b>{amount_label} ₽</b>\n\n"
-        + _format_bybit_menu_text(message.from_user.id)
+        + _format_bybit_menu_text(message.from_user.id, exchange)
     )
     try:
         await message.bot.edit_message_text(
@@ -685,7 +711,7 @@ async def process_settings_value(message: Message, state: FSMContext):
         return
 
     data = await state.get_data()
-    exchange = data.get("exchange", "bybit")
+    exchange = data.get("exchange", "bybit_1")
     mode = data.get("mode", "sequential")
     label = EXCHANGE_LABELS.get(exchange, exchange)
     settings_msg_id = data.get("settings_msg_id")
@@ -748,13 +774,13 @@ async def process_settings_value(message: Message, state: FSMContext):
         desc = f"позиции {', '.join(str(v) for v in value)}"
 
     # После сохранения: BestChange → bc-меню, Bybit → bybit-меню
-    if exchange == "bestchange":
+    if _is_bc(exchange):
         await state.set_state(SettingsStates.choosing_bc_section)
-        confirm_text = f"✅ Выдача сохранена: <b>{desc}</b>\n\n" + _format_bc_menu_text(message.from_user.id)
+        confirm_text = f"✅ Выдача сохранена: <b>{desc}</b>\n\n" + _format_bc_menu_text(message.from_user.id, exchange)
         reply_markup = get_settings_bc_menu_keyboard()
-    else:
+    elif _is_bybit(exchange):
         await state.set_state(SettingsStates.choosing_bybit_section)
-        confirm_text = f"✅ Выдача сохранена: <b>{desc}</b>\n\n" + _format_bybit_menu_text(message.from_user.id)
+        confirm_text = f"✅ Выдача сохранена: <b>{desc}</b>\n\n" + _format_bybit_menu_text(message.from_user.id, exchange)
         reply_markup = get_settings_bybit_menu_keyboard()
 
     try:

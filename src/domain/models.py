@@ -37,34 +37,28 @@ class BybitP2PResponse(BaseModel):
     result: BybitP2PResponsePayload
 
 # Unified Presentation Model (what the UI will render)
+class RateSection(BaseModel):
+    label: str
+    items: list[Any] = Field(default_factory=list)  # list of (position, formatted_line)
+
 class ExchangeRateReport(BaseModel):
     cbrf_rate: float
-    bestchange_label: str = "BestChange (Сбер → USDT BEP20)"
-    bybit_label: str = "Bybit P2P (USDT/RUB)"
-    bestchange_items: list[Any] = Field(default_factory=list)  # list of (position, formatted_line)
-    bybit_items: list[Any] = Field(default_factory=list)       # list of (position, formatted_line)
+    sections: list[RateSection] = Field(default_factory=list)
     timestamp: datetime = Field(default_factory=datetime.now)
 
     def format_for_telegram(self) -> str:
         text = [
             f"<b>Курс ЦБ РФ:</b> {self.cbrf_rate:.2f} ₽/$",
             "",
-            f"<b>{self.bestchange_label}</b>",
         ]
 
-        if self.bestchange_items:
-            bc_rows = [f"#{pos:<3}{line}" for pos, line in self.bestchange_items]
-            text.append("<pre>" + "\n".join(bc_rows) + "</pre>")
-        else:
-            text.append("<i>Нет данных</i>")
-
-        text.append(f"<b>{self.bybit_label}</b>")
-
-        if self.bybit_items:
-            bybit_rows = [f"#{pos:<3}{line}" for pos, line in self.bybit_items]
-            text.append("<pre>" + "\n".join(bybit_rows) + "</pre>")
-        else:
-            text.append("<i>Нет данных</i>")
+        for section in self.sections:
+            text.append(f"<b>{section.label}</b>")
+            if section.items:
+                rows = [f"#{pos:<3}{line}" for pos, line in section.items]
+                text.append("<pre>" + "\n".join(rows) + "</pre>")
+            else:
+                text.append("<i>Нет данных</i>")
 
         text.append(f"<i>Обновлено: {self.timestamp.strftime('%H:%M:%S')}</i>")
         return "\n".join(text)

@@ -29,8 +29,10 @@ def get_admin_menu_keyboard() -> InlineKeyboardMarkup:
 def get_settings_exchange_keyboard() -> InlineKeyboardMarkup:
     """Keyboard for choosing which exchange to configure."""
     buttons = [
-        [InlineKeyboardButton(text="📈 BestChange", callback_data="settings_bestchange")],
-        [InlineKeyboardButton(text="💰 Bybit P2P", callback_data="settings_bybit")],
+        [InlineKeyboardButton(text="📈 BestChange-1", callback_data="settings_bestchange_1")],
+        [InlineKeyboardButton(text="📈 BestChange-2", callback_data="settings_bestchange_2")],
+        [InlineKeyboardButton(text="💰 Bybit P2P-1", callback_data="settings_bybit_1")],
+        [InlineKeyboardButton(text="💰 Bybit P2P-2", callback_data="settings_bybit_2")],
         [InlineKeyboardButton(text="◀️ Назад в меню", callback_data="back_to_main")],
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
