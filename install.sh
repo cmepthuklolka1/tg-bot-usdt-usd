@@ -27,7 +27,7 @@ else
     echo "  → .env уже существует, пропускаем"
 fi
 
-for f in whitelist banned_sellers pinned_messages; do
+for f in whitelist banned_sellers pinned_messages user_settings; do
     if [ ! -f "$SCRIPT_DIR/config/${f}.json" ]; then
         cp "$SCRIPT_DIR/config/${f}.example.json" "$SCRIPT_DIR/config/${f}.json"
         echo "  → Создан config/${f}.json"

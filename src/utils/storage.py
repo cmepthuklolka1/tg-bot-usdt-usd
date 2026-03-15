@@ -94,6 +94,53 @@ class BannedSellersStorage:
             return True
         return False
 
+DISPLAY_DEFAULTS = {
+    "bestchange": {"mode": "positions", "value": [1, 10]},
+    "bybit": {"mode": "sequential", "value": 10},
+}
+
+
+class UserSettingsStorage:
+    def __init__(self, path=config.user_settings_path):
+        self.path = path
+
+    def _read_data(self) -> dict:
+        try:
+            with open(self.path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            logger.error(f"Error reading user settings: {e}")
+            return {"users": {}}
+
+    def _write_data(self, data: dict):
+        with open(self.path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=4, ensure_ascii=False)
+
+    def get_exchange_settings(self, user_id: int, exchange: str) -> dict:
+        """Возвращает настройки отображения для конкретной биржи.
+        Если у пользователя нет настроек — возвращает дефолт."""
+        data = self._read_data()
+        user_settings = data.get("users", {}).get(str(user_id), {})
+        return user_settings.get(exchange, DISPLAY_DEFAULTS.get(exchange, {}))
+
+    def set_exchange_settings(self, user_id: int, exchange: str, mode: str, value):
+        """Сохраняет настройки отображения для конкретной биржи."""
+        data = self._read_data()
+        users = data.get("users", {})
+        if str(user_id) not in users:
+            users[str(user_id)] = {}
+        users[str(user_id)][exchange] = {"mode": mode, "value": value}
+        data["users"] = users
+        self._write_data(data)
+
+    def get_all_settings(self, user_id: int) -> dict:
+        """Возвращает настройки пользователя для обеих бирж (с дефолтами)."""
+        return {
+            "bestchange": self.get_exchange_settings(user_id, "bestchange"),
+            "bybit": self.get_exchange_settings(user_id, "bybit"),
+        }
+
+
 class PinnedMessageStorage:
     def __init__(self, path="config/pinned_messages.json"):
         self.path = path

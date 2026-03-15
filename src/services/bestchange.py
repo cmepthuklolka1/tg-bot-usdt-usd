@@ -98,17 +98,8 @@ async def fetch_bestchange_rates() -> BestChangeRates:
             except ValueError:
                 continue # Skip rows that couldn't be parsed
 
-        if len(valid_offers) < 10:
-            logger.warning(f"BestChange returned less than 10 valid offers: {len(valid_offers)}")
-            
-        # We need the 1st and 10th element (index 0 and 9)
-        selected_offers = []
-        if len(valid_offers) > 0:
-            selected_offers.append(valid_offers[0])
-        if len(valid_offers) >= 10:
-            selected_offers.append(valid_offers[9])
-            
-        return BestChangeRates(offers=selected_offers)
+        logger.info(f"BestChange: {len(valid_offers)} valid offers parsed")
+        return BestChangeRates(offers=valid_offers)
 
     except Exception as e:
         logger.error(f"Failed to fetch BestChange rates: {e}")

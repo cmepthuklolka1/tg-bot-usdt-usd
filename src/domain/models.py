@@ -1,5 +1,6 @@
 from datetime import datetime
 from pydantic import BaseModel, Field
+from typing import Any
 
 # CBRF Model
 class CBRFRate(BaseModel):
@@ -38,9 +39,8 @@ class BybitP2PResponse(BaseModel):
 # Unified Presentation Model (what the UI will render)
 class ExchangeRateReport(BaseModel):
     cbrf_rate: float
-    bestchange_top_1: str | None = None
-    bestchange_top_10: str | None = None
-    bybit_items: list[str] = Field(default_factory=list)  # Up to 7 items
+    bestchange_items: list[Any] = Field(default_factory=list)  # list of (position, formatted_line)
+    bybit_items: list[Any] = Field(default_factory=list)       # list of (position, formatted_line)
     timestamp: datetime = Field(default_factory=datetime.now)
 
     def format_for_telegram(self) -> str:
@@ -50,21 +50,16 @@ class ExchangeRateReport(BaseModel):
             "<b>BestChange (Сбер → USDT BEP20)</b>",
         ]
 
-        bc_rows = []
-        if self.bestchange_top_1:
-            bc_rows.append(f"#1  {self.bestchange_top_1}")
-        if self.bestchange_top_10:
-            bc_rows.append(f"#10 {self.bestchange_top_10}")
-        if bc_rows:
+        if self.bestchange_items:
+            bc_rows = [f"#{pos:<3}{line}" for pos, line in self.bestchange_items]
             text.append("<pre>" + "\n".join(bc_rows) + "</pre>")
+        else:
+            text.append("<i>Нет данных</i>")
 
         text.append("<b>Bybit P2P (USDT/RUB)</b>")
 
         if self.bybit_items:
-            bybit_rows = [
-                f"#{i:<2} {line}"
-                for i, line in enumerate(self.bybit_items, start=1)
-            ]
+            bybit_rows = [f"#{pos:<3}{line}" for pos, line in self.bybit_items]
             text.append("<pre>" + "\n".join(bybit_rows) + "</pre>")
         else:
             text.append("<i>Нет данных</i>")

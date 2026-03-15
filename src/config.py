@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     whitelist_path: Path = Field(default=BASE_DIR / 'config' / 'whitelist.json')
     banned_sellers_path: Path = Field(default=BASE_DIR / 'config' / 'banned_sellers.json')
 
+    # User display settings
+    user_settings_path: Path = Field(default=BASE_DIR / 'config' / 'user_settings.json')
+
     # Wait configurations for fetching
     fetch_timeout: int = Field(default=15)
     fetch_retries: int = Field(default=3)
@@ -50,3 +53,11 @@ def init_banned_sellers():
         with open(config.banned_sellers_path, 'w', encoding='utf-8') as f:
             json.dump({'banned': []}, f, indent=4)
         logger.info(f"Created new banned sellers file at {config.banned_sellers_path}")
+
+def init_user_settings():
+    """Ensure user_settings.json exists and has correct structure"""
+    config.user_settings_path.parent.mkdir(parents=True, exist_ok=True)
+    if not config.user_settings_path.exists():
+        with open(config.user_settings_path, 'w', encoding='utf-8') as f:
+            json.dump({'users': {}}, f, indent=4)
+        logger.info(f"Created new user settings file at {config.user_settings_path}")

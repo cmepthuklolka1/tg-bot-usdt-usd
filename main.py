@@ -6,7 +6,7 @@ import asyncio
 import logging
 from aiogram import Bot, Dispatcher
 
-from src.config import config, init_whitelist, init_banned_sellers
+from src.config import config, init_whitelist, init_banned_sellers, init_user_settings
 from src.handlers import user, admin
 from src.utils.commands import set_bot_commands
 from src.utils.storage import PinnedMessageStorage, WhitelistStorage
@@ -35,12 +35,14 @@ async def auto_update_task(bot: Bot):
                 continue
                 
             logger.info("Запуск ежечасного автообновления курсов...")
-            report_text = await generate_rates_report()
-            
+
             for str_chat_id, msg_id in pinned_messages.items():
                 chat_id = int(str_chat_id)
                 if not whitelist.is_allowed(chat_id):
                     continue
+
+                # Персональный отчёт для каждого пользователя
+                report_text = await generate_rates_report(user_id=chat_id)
 
                 # Проверяем, реально ли сообщение закреплено в Telegram
                 actual_pinned_id = None
@@ -114,6 +116,7 @@ async def main():
     logger.info("Инициализация файлов хранения...")
     init_whitelist()
     init_banned_sellers()
+    init_user_settings()
 
     logger.info("Запуск Telegram-бота...")
     bot = Bot(token=config.bot_token)
