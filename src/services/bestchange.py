@@ -7,8 +7,7 @@ from ..domain.models import ExchangerOffer, BestChangeRates
 
 logger = logging.getLogger(__name__)
 
-# Target: Sberbank to USDT BEP20
-URL = "https://www.bestchange.ru/sberbank-to-tether-bep20.html"
+BASE_URL = "https://www.bestchange.ru/{payment}-to-{coin}.html"
 
 # We must mock a real browser to avoid Cloudflare JS challenges
 HEADERS = {
@@ -27,11 +26,15 @@ def clean_float(text: str) -> float:
     return float(clean)
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=2, min=3, max=15))
-async def fetch_bestchange_rates() -> BestChangeRates:
-    """Scrapes 1st and 10th rows from BestChange's exchange table."""
+async def fetch_bestchange_rates(
+    payment: str = "sberbank",
+    coin: str = "tether-bep20",
+) -> BestChangeRates:
+    """Scrapes exchange table from BestChange for given payment method and coin."""
+    url = BASE_URL.format(payment=payment, coin=coin)
     session = AsyncSession(impersonate="chrome110")
     try:
-        response = await session.get(URL, headers=HEADERS, timeout=15)
+        response = await session.get(url, headers=HEADERS, timeout=15)
         response.raise_for_status()
 
         soup = BeautifulSoup(response.content, 'html.parser')
@@ -74,8 +77,8 @@ async def fetch_bestchange_rates() -> BestChangeRates:
             give_td = tds[2]
             give_fs = give_td.find('div', class_='fs')
             give_text = give_fs.text if give_fs else give_td.text
-            # Remove badging like "Сбербанк RUB"
-            give_text = give_text.split('Сбербанк')[0].split('RUB')[0].strip()
+            # Remove currency label (e.g. "Сбербанк RUB", "Альфа-Банк RUB")
+            give_text = give_text.split('RUB')[0].strip()
             
             # Column 3: Get (USDT)
             get_td = tds[3]
@@ -98,7 +101,7 @@ async def fetch_bestchange_rates() -> BestChangeRates:
             except ValueError:
                 continue # Skip rows that couldn't be parsed
 
-        logger.info(f"BestChange: {len(valid_offers)} valid offers parsed")
+        logger.info(f"BestChange ({payment} → {coin}): {len(valid_offers)} valid offers parsed")
         return BestChangeRates(offers=valid_offers)
 
     except Exception as e:

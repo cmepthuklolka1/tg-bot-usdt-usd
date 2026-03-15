@@ -12,6 +12,7 @@ from ..domain.models import ExchangeRateReport
 from ..keyboards.menus import (
     get_main_menu_keyboard, get_rates_keyboard,
     get_settings_exchange_keyboard, get_settings_mode_keyboard, get_settings_input_keyboard,
+    get_settings_bc_payment_keyboard, get_settings_bc_coin_keyboard,
 )
 from ..services.cbrf import fetch_usd_rub_rate
 from ..services.bestchange import fetch_bestchange_rates
@@ -30,10 +31,26 @@ EXCHANGE_LABELS = {
     "bybit": "Bybit P2P",
 }
 
+PAYMENT_SLUGS = {
+    "sberbank":  "Сбер",
+    "alfa-bank": "Альфа-Банк",
+    "tinkoff":   "Т-Банк",
+    "vtb":       "ВТБ",
+}
+
+COIN_SLUGS = {
+    "tether-erc20": "USDT ERC20",
+    "tether-trc20": "USDT TRC20",
+    "tether-bep20": "USDT BEP20",
+    "tether-ton":   "USDT TON",
+}
+
 
 # ─── FSM States ───────────────────────────────────────────────
 
 class SettingsStates(StatesGroup):
+    choosing_bc_payment = State()
+    choosing_bc_coin = State()
     choosing_mode = State()
     waiting_for_value = State()
 
@@ -107,7 +124,14 @@ def _format_settings_text(user_id: int) -> str:
             desc = f"первые {value}"
         else:
             desc = f"позиции {', '.join(str(v) for v in value)}"
-        lines.append(f"<b>{label}:</b> {desc}")
+        if exchange == "bestchange":
+            payment = s.get("payment", "sberbank")
+            coin = s.get("coin", "tether-bep20")
+            pay_label = PAYMENT_SLUGS.get(payment, payment)
+            coin_label = COIN_SLUGS.get(coin, coin)
+            lines.append(f"<b>{label}:</b> {pay_label} → {coin_label}, {desc}")
+        else:
+            lines.append(f"<b>{label}:</b> {desc}")
     lines.append("\nВыберите биржу для настройки:")
     return "\n".join(lines)
 
@@ -131,12 +155,19 @@ async def generate_rates_report(user_id: int | None = None) -> str:
         logger.error(f"Generate report CBRF error: {e}")
         cbrf_rate = 0.0
 
+    bc_payment = bc_settings.get("payment", "sberbank")
+    bc_coin = bc_settings.get("coin", "tether-bep20")
+
     bestchange_items: list[tuple[int, str]] = []
     try:
-        bc = await fetch_bestchange_rates()
+        bc = await fetch_bestchange_rates(payment=bc_payment, coin=bc_coin)
         bestchange_items = _apply_display_settings(bc.offers, bc_settings, _format_bc_line)
     except Exception as e:
         logger.error(f"Generate report BestChange error: {e}")
+
+    pay_label = PAYMENT_SLUGS.get(bc_payment, bc_payment)
+    coin_label = COIN_SLUGS.get(bc_coin, bc_coin)
+    bc_label = f"BestChange ({pay_label} → {coin_label})"
 
     bybit_items: list[tuple[int, str]] = []
     try:
@@ -147,6 +178,7 @@ async def generate_rates_report(user_id: int | None = None) -> str:
 
     report = ExchangeRateReport(
         cbrf_rate=cbrf_rate,
+        bestchange_label=bc_label,
         bestchange_items=bestchange_items,
         bybit_items=bybit_items,
         timestamp=datetime.now()
@@ -322,10 +354,71 @@ async def cb_settings_exchange(callback: CallbackQuery, state: FSMContext):
 
     # Сохраняем ID этого сообщения — в него будем редактировать после ввода текста
     await state.update_data(exchange=exchange, settings_msg_id=callback.message.message_id)
-    await state.set_state(SettingsStates.choosing_mode)
     await callback.answer()
 
     current = settings_storage.get_exchange_settings(callback.from_user.id, exchange)
+
+    if exchange == "bestchange":
+        # Маршрут BestChange: сначала выбор банка
+        payment = current.get("payment", "sberbank")
+        coin = current.get("coin", "tether-bep20")
+        pay_label = PAYMENT_SLUGS.get(payment, payment)
+        coin_label = COIN_SLUGS.get(coin, coin)
+        await state.set_state(SettingsStates.choosing_bc_payment)
+        await _edit_or_send(
+            callback,
+            f"<b>{label}</b>\nТекущий источник: {pay_label} → {coin_label}\n\nВыберите способ оплаты:",
+            get_settings_bc_payment_keyboard(),
+        )
+    else:
+        # Маршрут Bybit: сразу выбор режима
+        mode = current.get("mode", "sequential")
+        value = current.get("value")
+        if mode == "sequential":
+            current_desc = f"первые {value}"
+        else:
+            current_desc = f"позиции {', '.join(str(v) for v in value)}"
+        await state.set_state(SettingsStates.choosing_mode)
+        await _edit_or_send(
+            callback,
+            f"<b>{label}</b>\nТекущая настройка: {current_desc}\n\nВыберите режим отображения:",
+            get_settings_mode_keyboard(),
+        )
+
+
+@router.callback_query(SettingsStates.choosing_bc_payment, F.data.startswith("bc_pay_"))
+async def cb_settings_bc_payment(callback: CallbackQuery, state: FSMContext):
+    payment = callback.data.removeprefix("bc_pay_")
+    await state.update_data(payment=payment)
+    await state.set_state(SettingsStates.choosing_bc_coin)
+    await callback.answer()
+
+    pay_label = PAYMENT_SLUGS.get(payment, payment)
+    data = await state.get_data()
+    current = settings_storage.get_exchange_settings(callback.from_user.id, "bestchange")
+    coin = data.get("coin") or current.get("coin", "tether-bep20")
+    coin_label = COIN_SLUGS.get(coin, coin)
+
+    await _edit_or_send(
+        callback,
+        f"<b>BestChange</b>\nСпособ оплаты: {pay_label}\nТекущий актив: {coin_label}\n\nВыберите актив:",
+        get_settings_bc_coin_keyboard(),
+    )
+
+
+@router.callback_query(SettingsStates.choosing_bc_coin, F.data.startswith("bc_coin_"))
+async def cb_settings_bc_coin(callback: CallbackQuery, state: FSMContext):
+    coin = callback.data.removeprefix("bc_coin_")
+    await state.update_data(coin=coin)
+    await state.set_state(SettingsStates.choosing_mode)
+    await callback.answer()
+
+    data = await state.get_data()
+    payment = data.get("payment", "sberbank")
+    pay_label = PAYMENT_SLUGS.get(payment, payment)
+    coin_label = COIN_SLUGS.get(coin, coin)
+
+    current = settings_storage.get_exchange_settings(callback.from_user.id, "bestchange")
     mode = current.get("mode", "sequential")
     value = current.get("value")
     if mode == "sequential":
@@ -335,7 +428,7 @@ async def cb_settings_exchange(callback: CallbackQuery, state: FSMContext):
 
     await _edit_or_send(
         callback,
-        f"<b>{label}</b>\nТекущая настройка: {current_desc}\n\nВыберите режим отображения:",
+        f"<b>BestChange</b>\nИсточник: {pay_label} → {coin_label}\nТекущий режим: {current_desc}\n\nВыберите режим отображения:",
         get_settings_mode_keyboard(),
     )
 
@@ -392,6 +485,9 @@ async def process_settings_value(message: Message, state: FSMContext):
         except Exception:
             await message.answer(err, reply_markup=get_settings_input_keyboard(), parse_mode="HTML")
 
+    payment = data.get("payment")  # None для Bybit
+    coin = data.get("coin")        # None для Bybit
+
     if mode == "sequential":
         if not text.isdigit() or int(text) < 1:
             await show_error("❌ Введите положительное число (например: <b>10</b>).")
@@ -400,7 +496,8 @@ async def process_settings_value(message: Message, state: FSMContext):
         if value > 50:
             await show_error("❌ Максимум — 50.")
             return
-        settings_storage.set_exchange_settings(message.from_user.id, exchange, mode, value)
+        settings_storage.set_exchange_settings(message.from_user.id, exchange, mode, value,
+                                               payment=payment, coin=coin)
         desc = f"первые {value}"
     else:  # positions
         cleaned = text.replace(" ", "")
@@ -415,7 +512,8 @@ async def process_settings_value(message: Message, state: FSMContext):
         if any(v > 100 for v in value):
             await show_error("❌ Номер позиции не может быть больше 100.")
             return
-        settings_storage.set_exchange_settings(message.from_user.id, exchange, mode, value)
+        settings_storage.set_exchange_settings(message.from_user.id, exchange, mode, value,
+                                               payment=payment, coin=coin)
         desc = f"позиции {', '.join(str(v) for v in value)}"
 
     await state.clear()

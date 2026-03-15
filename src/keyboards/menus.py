@@ -50,3 +50,27 @@ def get_settings_input_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="◀️ Отмена", callback_data="settings_menu")],
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def get_settings_bc_payment_keyboard() -> InlineKeyboardMarkup:
+    """Keyboard for choosing BestChange payment method (bank)."""
+    buttons = [
+        [InlineKeyboardButton(text="Сбербанк",   callback_data="bc_pay_sberbank")],
+        [InlineKeyboardButton(text="Альфа-Банк", callback_data="bc_pay_alfa-bank")],
+        [InlineKeyboardButton(text="Т-Банк",     callback_data="bc_pay_tinkoff")],
+        [InlineKeyboardButton(text="ВТБ",         callback_data="bc_pay_vtb")],
+        [InlineKeyboardButton(text="◀️ Назад",   callback_data="settings_menu")],
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def get_settings_bc_coin_keyboard() -> InlineKeyboardMarkup:
+    """Keyboard for choosing BestChange coin (USDT network)."""
+    buttons = [
+        [InlineKeyboardButton(text="USDT ERC20", callback_data="bc_coin_tether-erc20")],
+        [InlineKeyboardButton(text="USDT TRC20", callback_data="bc_coin_tether-trc20")],
+        [InlineKeyboardButton(text="USDT BEP20", callback_data="bc_coin_tether-bep20")],
+        [InlineKeyboardButton(text="USDT TON",   callback_data="bc_coin_tether-ton")],
+        [InlineKeyboardButton(text="◀️ Назад",   callback_data="settings_bestchange")],
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)

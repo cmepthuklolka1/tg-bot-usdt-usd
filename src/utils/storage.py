@@ -95,7 +95,10 @@ class BannedSellersStorage:
         return False
 
 DISPLAY_DEFAULTS = {
-    "bestchange": {"mode": "positions", "value": [1, 10]},
+    "bestchange": {
+        "mode": "positions", "value": [1, 10],
+        "payment": "sberbank", "coin": "tether-bep20",
+    },
     "bybit": {"mode": "sequential", "value": 10},
 }
 
@@ -123,13 +126,20 @@ class UserSettingsStorage:
         user_settings = data.get("users", {}).get(str(user_id), {})
         return user_settings.get(exchange, DISPLAY_DEFAULTS.get(exchange, {}))
 
-    def set_exchange_settings(self, user_id: int, exchange: str, mode: str, value):
-        """Сохраняет настройки отображения для конкретной биржи."""
+    def set_exchange_settings(self, user_id: int, exchange: str, mode: str, value,
+                              payment: str = None, coin: str = None):
+        """Сохраняет настройки отображения для конкретной биржи.
+        payment и coin актуальны только для BestChange."""
         data = self._read_data()
         users = data.get("users", {})
         if str(user_id) not in users:
             users[str(user_id)] = {}
-        users[str(user_id)][exchange] = {"mode": mode, "value": value}
+        entry = {"mode": mode, "value": value}
+        if payment is not None:
+            entry["payment"] = payment
+        if coin is not None:
+            entry["coin"] = coin
+        users[str(user_id)][exchange] = entry
         data["users"] = users
         self._write_data(data)
 

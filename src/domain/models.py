@@ -39,6 +39,7 @@ class BybitP2PResponse(BaseModel):
 # Unified Presentation Model (what the UI will render)
 class ExchangeRateReport(BaseModel):
     cbrf_rate: float
+    bestchange_label: str = "BestChange (Сбер → USDT BEP20)"
     bestchange_items: list[Any] = Field(default_factory=list)  # list of (position, formatted_line)
     bybit_items: list[Any] = Field(default_factory=list)       # list of (position, formatted_line)
     timestamp: datetime = Field(default_factory=datetime.now)
@@ -47,7 +48,7 @@ class ExchangeRateReport(BaseModel):
         text = [
             f"<b>Курс ЦБ РФ:</b> {self.cbrf_rate:.2f} ₽/$",
             "",
-            "<b>BestChange (Сбер → USDT BEP20)</b>",
+            f"<b>{self.bestchange_label}</b>",
         ]
 
         if self.bestchange_items:
