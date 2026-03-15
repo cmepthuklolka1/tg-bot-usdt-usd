@@ -53,16 +53,16 @@ class ExchangeRateReport(BaseModel):
         ]
 
         if self.bestchange_items:
-            bc_rows = [f"#{pos:<3}{line}" for pos, line in self.bestchange_items]
-            text.append("<pre>" + "\n".join(bc_rows) + "</pre>")
+            bc_rows = [f"#{pos}  {line}" for pos, line in self.bestchange_items]
+            text.append("\n".join(bc_rows))
         else:
             text.append("<i>Нет данных</i>")
 
         text.append(f"<b>{self.bybit_label}</b>")
 
         if self.bybit_items:
-            bybit_rows = [f"#{pos:<3}{line}" for pos, line in self.bybit_items]
-            text.append("<pre>" + "\n".join(bybit_rows) + "</pre>")
+            bybit_rows = [f"#{pos}  {line}" for pos, line in self.bybit_items]
+            text.append("\n".join(bybit_rows))
         else:
             text.append("<i>Нет данных</i>")
 

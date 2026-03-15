@@ -1,5 +1,4 @@
 import logging
-import unicodedata
 from datetime import datetime
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
@@ -72,29 +71,12 @@ async def _get_actual_pinned_id(bot, chat_id: int) -> int | None:
     return None
 
 
-def _pad_to_width(s: str, width: int) -> str:
-    """Обрезает строку до визуальной ширины width и добивает пробелами.
-    Emoji и иероглифы ('W', 'F') = 2 единицы, остальные символы = 1."""
-    current_w = 0
-    result = []
-    for char in s:
-        char_w = 2 if unicodedata.east_asian_width(char) in ('W', 'F') else 1
-        if current_w + char_w > width:
-            break
-        result.append(char)
-        current_w += char_w
-    result.append(' ' * (width - current_w))
-    return ''.join(result)
-
-
 def _format_bc_line(offer) -> str:
-    name = _pad_to_width(offer.exchanger_name, 18)
-    return f"{name} {offer.rate:>7.2f} ₽"
+    return f"{offer.rate:.2f} ₽  {offer.exchanger_name}"
 
 
 def _format_bybit_line(item) -> str:
-    name = _pad_to_width(item.nickName, 18)
-    return f"{name} {item.price:>7.2f} ₽"
+    return f"{item.price:.2f} ₽  {item.nickName}"
 
 
 def _apply_display_settings(items: list, settings: dict, format_fn) -> list[tuple[int, str]]:
