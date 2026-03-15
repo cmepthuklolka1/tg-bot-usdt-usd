@@ -113,6 +113,7 @@ async def cb_show_rates(callback: CallbackQuery):
 
     # Проверяем, какое сообщение реально закреплено в Telegram
     actual_pinned_id = await _get_actual_pinned_id(callback.bot, chat_id)
+    logger.info(f"show_rates: chat_id={chat_id}, stored={stored_msg_id}, actual_pinned={actual_pinned_id}")
 
     # Обновляем существующее, только если оно реально закреплено
     if stored_msg_id and actual_pinned_id == stored_msg_id:
