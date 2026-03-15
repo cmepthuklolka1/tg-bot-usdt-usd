@@ -38,24 +38,46 @@ git clone https://github.com/cmepthuklolka1/tg-bot-usdt-usd.git
 cd tg-bot-usdt-usd
 ```
 
-### 2. Создайте виртуальное окружение и установите зависимости
+### 2. Запустите скрипт установки
 
 ```bash
+chmod +x install.sh
+./install.sh
+```
+
+Скрипт автоматически:
+- создаст виртуальное окружение и установит зависимости
+- скопирует шаблоны конфигурационных файлов
+- создаст файл службы systemd (`/etc/systemd/system/usdt-bot.service`)
+- выведет команды для добавления в автозапуск
+
+### 3. Заполните `.env`
+
+```bash
+nano .env
+```
+
+```env
+BOT_TOKEN=ваш_токен_от_BotFather
+ADMIN_ID=ваш_telegram_id
+```
+
+<details>
+<summary>🪟 Установка на Windows</summary>
+
+```bat
 python -m venv venv
-
-# Linux / macOS
-source venv/bin/activate
-
-# Windows
 venv\Scripts\activate
-
 pip install -r requirements.txt
 ```
 
-### 3. Настройте переменные окружения
+Скопируйте конфигурационные файлы:
 
-```bash
-cp .env.example .env
+```bat
+copy .env.example .env
+copy config\whitelist.example.json config\whitelist.json
+copy config\banned_sellers.example.json config\banned_sellers.json
+copy config\pinned_messages.example.json config\pinned_messages.json
 ```
 
 Отредактируйте `.env`:
@@ -65,19 +87,7 @@ BOT_TOKEN=ваш_токен_от_BotFather
 ADMIN_ID=ваш_telegram_id
 ```
 
-### 4. Создайте конфигурационные файлы
-
-```bash
-# Linux / macOS
-cp config/whitelist.example.json config/whitelist.json
-cp config/banned_sellers.example.json config/banned_sellers.json
-cp config/pinned_messages.example.json config/pinned_messages.json
-
-# Windows
-copy config\whitelist.example.json config\whitelist.json
-copy config\banned_sellers.example.json config\banned_sellers.json
-copy config\pinned_messages.example.json config\pinned_messages.json
-```
+</details>
 
 ---
 
@@ -89,34 +99,10 @@ python main.py
 
 ---
 
-## 🔧 Управление как службой
-
-### Linux — systemd
-
-Создайте файл службы `/etc/systemd/system/usdt-bot.service`:
-
-```ini
-[Unit]
-Description=USDT Rate Monitor Bot
-After=network.target
-
-[Service]
-Type=simple
-User=your_user
-WorkingDirectory=/path/to/tg-bot-usdt-usd
-ExecStart=/path/to/tg-bot-usdt-usd/venv/bin/python main.py
-Restart=on-failure
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Управление службой:
+## 🔧 Управление службой (Linux)
 
 ```bash
-# Активировать и запустить
-sudo systemctl daemon-reload
+# Добавить в автозапуск и запустить
 sudo systemctl enable usdt-bot
 sudo systemctl start usdt-bot
 
@@ -127,11 +113,12 @@ sudo systemctl status usdt-bot
 sudo systemctl stop usdt-bot
 sudo systemctl restart usdt-bot
 
-# Логи
+# Логи в реальном времени
 sudo journalctl -u usdt-bot -f
 ```
 
-### Windows — NSSM
+<details>
+<summary>🪟 Управление службой на Windows (NSSM)</summary>
 
 Установите [NSSM](https://nssm.cc/), затем в командной строке с правами администратора:
 
@@ -151,27 +138,30 @@ nssm status USDTBot
 nssm remove USDTBot confirm
 ```
 
+</details>
+
 ---
 
 ## 🔄 Обновление проекта
 
 ```bash
-# Остановить службу (если запущена)
-sudo systemctl stop usdt-bot        # Linux
-# или
-nssm stop USDTBot                   # Windows
-
-# Получить обновления
+sudo systemctl stop usdt-bot
 git pull origin main
-
-# Обновить зависимости (если изменился requirements.txt)
-pip install -r requirements.txt
-
-# Запустить службу снова
-sudo systemctl start usdt-bot       # Linux
-# или
-nssm start USDTBot                  # Windows
+venv/bin/pip install -r requirements.txt
+sudo systemctl start usdt-bot
 ```
+
+<details>
+<summary>🪟 Обновление на Windows</summary>
+
+```bat
+nssm stop USDTBot
+git pull origin main
+venv\Scripts\pip install -r requirements.txt
+nssm start USDTBot
+```
+
+</details>
 
 ---
 
@@ -180,6 +170,7 @@ nssm start USDTBot                  # Windows
 ```
 tg-bot-usdt-usd/
 ├── main.py                     # Точка входа + фоновое автообновление
+├── install.sh                  # Скрипт установки для Linux
 ├── requirements.txt
 ├── .env.example                # Шаблон переменных окружения
 ├── config/
