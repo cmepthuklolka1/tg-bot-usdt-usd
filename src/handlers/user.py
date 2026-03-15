@@ -11,7 +11,7 @@ from ..config import config
 from ..domain.models import ExchangeRateReport
 from ..keyboards.menus import (
     get_main_menu_keyboard, get_rates_keyboard,
-    get_settings_exchange_keyboard, get_settings_mode_keyboard,
+    get_settings_exchange_keyboard, get_settings_mode_keyboard, get_settings_input_keyboard,
 )
 from ..services.cbrf import fetch_usd_rub_rate
 from ..services.bestchange import fetch_bestchange_rates
@@ -282,6 +282,21 @@ async def cb_back_to_main(callback: CallbackQuery, state: FSMContext):
     )
 
 
+# ─── Settings Helpers ────────────────────────────────────────
+
+async def _edit_or_send(callback: CallbackQuery, text: str, reply_markup):
+    """Редактирует текущее сообщение; если не получается — отправляет новое."""
+    try:
+        await callback.message.edit_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
+    except Exception:
+        await callback.bot.send_message(
+            chat_id=callback.message.chat.id,
+            text=text,
+            reply_markup=reply_markup,
+            parse_mode="HTML",
+        )
+
+
 # ─── Settings Handlers ───────────────────────────────────────
 
 @router.callback_query(F.data == "settings_menu")
@@ -293,12 +308,7 @@ async def cb_settings_menu(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     await callback.answer()
     text = _format_settings_text(callback.from_user.id)
-    await callback.bot.send_message(
-        chat_id=callback.message.chat.id,
-        text=text,
-        reply_markup=get_settings_exchange_keyboard(),
-        parse_mode="HTML",
-    )
+    await _edit_or_send(callback, text, get_settings_exchange_keyboard())
 
 
 @router.callback_query(F.data.in_({"settings_bestchange", "settings_bybit"}))
@@ -310,7 +320,8 @@ async def cb_settings_exchange(callback: CallbackQuery, state: FSMContext):
     exchange = "bestchange" if callback.data == "settings_bestchange" else "bybit"
     label = EXCHANGE_LABELS[exchange]
 
-    await state.update_data(exchange=exchange)
+    # Сохраняем ID этого сообщения — в него будем редактировать после ввода текста
+    await state.update_data(exchange=exchange, settings_msg_id=callback.message.message_id)
     await state.set_state(SettingsStates.choosing_mode)
     await callback.answer()
 
@@ -322,11 +333,10 @@ async def cb_settings_exchange(callback: CallbackQuery, state: FSMContext):
     else:
         current_desc = f"позиции {', '.join(str(v) for v in value)}"
 
-    await callback.bot.send_message(
-        chat_id=callback.message.chat.id,
-        text=f"<b>{label}</b>\nТекущая настройка: {current_desc}\n\nВыберите режим отображения:",
-        reply_markup=get_settings_mode_keyboard(),
-        parse_mode="HTML",
+    await _edit_or_send(
+        callback,
+        f"<b>{label}</b>\nТекущая настройка: {current_desc}\n\nВыберите режим отображения:",
+        get_settings_mode_keyboard(),
     )
 
 
@@ -338,79 +348,91 @@ async def cb_settings_mode(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
     if mode == "sequential":
-        prompt = "Введите количество первых строк для отображения (например: <b>15</b>):"
+        prompt = "Введите количество первых строк для отображения.\nПример: <b>15</b>"
     else:
-        prompt = "Введите номера позиций через запятую (например: <b>1, 3, 5, 7</b>):"
+        prompt = "Введите номера позиций через запятую.\nПример: <b>1, 3, 5, 7</b>"
 
-    await callback.bot.send_message(
-        chat_id=callback.message.chat.id,
-        text=prompt,
-        parse_mode="HTML",
-    )
-
-
-@router.message(SettingsStates.waiting_for_value, Command("cancel"))
-@router.message(SettingsStates.waiting_for_value, F.text.casefold() == "отмена")
-async def cancel_settings(message: Message, state: FSMContext):
-    await state.clear()
-    is_admin = message.from_user.id == config.admin_id
-    await message.answer(
-        "Настройка отменена.",
-        reply_markup=get_main_menu_keyboard(is_admin),
-    )
+    await _edit_or_send(callback, prompt, get_settings_input_keyboard())
 
 
 @router.message(SettingsStates.waiting_for_value)
 async def process_settings_value(message: Message, state: FSMContext):
     if not message.text:
-        await message.answer("Пожалуйста, введите текст.")
         return
 
     data = await state.get_data()
     exchange = data.get("exchange", "bybit")
     mode = data.get("mode", "sequential")
     label = EXCHANGE_LABELS.get(exchange, exchange)
+    settings_msg_id = data.get("settings_msg_id")
+
+    # Удаляем сообщение пользователя (убираем мусор из чата)
+    try:
+        await message.delete()
+    except Exception:
+        pass
 
     text = message.text.strip()
 
+    async def show_error(err: str):
+        """Редактирует сообщение с настройками, показывая ошибку + промпт снова."""
+        if mode == "sequential":
+            prompt = "Введите количество первых строк для отображения.\nПример: <b>15</b>"
+        else:
+            prompt = "Введите номера позиций через запятую.\nПример: <b>1, 3, 5, 7</b>"
+        full = f"{err}\n\n{prompt}"
+        try:
+            await message.bot.edit_message_text(
+                chat_id=message.chat.id,
+                message_id=settings_msg_id,
+                text=full,
+                reply_markup=get_settings_input_keyboard(),
+                parse_mode="HTML",
+            )
+        except Exception:
+            await message.answer(err, reply_markup=get_settings_input_keyboard(), parse_mode="HTML")
+
     if mode == "sequential":
         if not text.isdigit() or int(text) < 1:
-            await message.answer("❌ Введите положительное число (например: <b>10</b>).", parse_mode="HTML")
+            await show_error("❌ Введите положительное число (например: <b>10</b>).")
             return
         value = int(text)
         if value > 50:
-            await message.answer("❌ Максимум — 50.", parse_mode="HTML")
+            await show_error("❌ Максимум — 50.")
             return
         settings_storage.set_exchange_settings(message.from_user.id, exchange, mode, value)
         desc = f"первые {value}"
     else:  # positions
-        # Убираем пробелы, разбиваем по запятой
         cleaned = text.replace(" ", "")
-        parts = cleaned.split(",")
-        # Фильтруем пустые строки (если пользователь ввёл "1,,3")
-        parts = [p for p in parts if p]
+        parts = [p for p in cleaned.split(",") if p]
         if not parts:
-            await message.answer(
-                "❌ Неверный формат. Введите номера через запятую (например: <b>1, 3, 5, 7</b>).",
-                parse_mode="HTML",
-            )
+            await show_error("❌ Неверный формат. Введите номера через запятую (например: <b>1, 3, 5, 7</b>).")
             return
         if not all(p.isdigit() and int(p) >= 1 for p in parts):
-            await message.answer(
-                "❌ Все номера должны быть положительными числами.\nПример: <b>1, 3, 5, 7</b>",
-                parse_mode="HTML",
-            )
+            await show_error("❌ Все номера должны быть положительными числами.\nПример: <b>1, 3, 5, 7</b>")
             return
         value = sorted(set(int(p) for p in parts))
         if any(v > 100 for v in value):
-            await message.answer("❌ Номер позиции не может быть больше 100.", parse_mode="HTML")
+            await show_error("❌ Номер позиции не может быть больше 100.")
             return
         settings_storage.set_exchange_settings(message.from_user.id, exchange, mode, value)
         desc = f"позиции {', '.join(str(v) for v in value)}"
 
     await state.clear()
-    await message.answer(
-        f"✅ <b>{label}</b> — настроено: {desc}",
-        reply_markup=get_settings_exchange_keyboard(),
-        parse_mode="HTML",
-    )
+
+    # Редактируем сообщение с настройками: показываем подтверждение + текущие настройки
+    confirm_text = f"✅ <b>{label}</b> — настроено: {desc}\n\n" + _format_settings_text(message.from_user.id)
+    try:
+        await message.bot.edit_message_text(
+            chat_id=message.chat.id,
+            message_id=settings_msg_id,
+            text=confirm_text,
+            reply_markup=get_settings_exchange_keyboard(),
+            parse_mode="HTML",
+        )
+    except Exception:
+        await message.answer(
+            confirm_text,
+            reply_markup=get_settings_exchange_keyboard(),
+            parse_mode="HTML",
+        )

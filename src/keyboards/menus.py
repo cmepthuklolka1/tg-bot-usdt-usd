@@ -43,3 +43,10 @@ def get_settings_mode_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="◀️ Назад", callback_data="settings_menu")],
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+def get_settings_input_keyboard() -> InlineKeyboardMarkup:
+    """Minimal keyboard shown while waiting for text input in settings."""
+    buttons = [
+        [InlineKeyboardButton(text="◀️ Отмена", callback_data="settings_menu")],
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
