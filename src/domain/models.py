@@ -40,6 +40,7 @@ class BybitP2PResponse(BaseModel):
 class ExchangeRateReport(BaseModel):
     cbrf_rate: float
     bestchange_label: str = "BestChange (Сбер → USDT BEP20)"
+    bybit_label: str = "Bybit P2P (USDT/RUB)"
     bestchange_items: list[Any] = Field(default_factory=list)  # list of (position, formatted_line)
     bybit_items: list[Any] = Field(default_factory=list)       # list of (position, formatted_line)
     timestamp: datetime = Field(default_factory=datetime.now)
@@ -57,7 +58,7 @@ class ExchangeRateReport(BaseModel):
         else:
             text.append("<i>Нет данных</i>")
 
-        text.append("<b>Bybit P2P (USDT/RUB)</b>")
+        text.append(f"<b>{self.bybit_label}</b>")
 
         if self.bybit_items:
             bybit_rows = [f"#{pos:<3}{line}" for pos, line in self.bybit_items]

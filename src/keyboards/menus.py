@@ -84,3 +84,26 @@ def get_settings_bc_coin_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="◀️ Назад",   callback_data="settings_bestchange")],
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def get_settings_bybit_menu_keyboard() -> InlineKeyboardMarkup:
+    """Bybit P2P sub-menu: choose what to configure."""
+    buttons = [
+        [InlineKeyboardButton(text="💰 Сумма сделки", callback_data="bybit_section_amount")],
+        [InlineKeyboardButton(text="📋 Настройки выдачи", callback_data="bybit_section_display")],
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="settings_menu")],
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def get_settings_bybit_amount_keyboard() -> InlineKeyboardMarkup:
+    """Keyboard for choosing Bybit P2P min order amount (maxAmount filter)."""
+    buttons = [
+        [InlineKeyboardButton(text="50K",  callback_data="bybit_amount_50000"),
+         InlineKeyboardButton(text="100K", callback_data="bybit_amount_100000")],
+        [InlineKeyboardButton(text="200K", callback_data="bybit_amount_200000"),
+         InlineKeyboardButton(text="500K", callback_data="bybit_amount_500000")],
+        [InlineKeyboardButton(text="1M",   callback_data="bybit_amount_1000000")],
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="settings_bybit")],
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)

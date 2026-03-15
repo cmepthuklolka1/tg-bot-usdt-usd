@@ -99,7 +99,7 @@ DISPLAY_DEFAULTS = {
         "mode": "positions", "value": [1, 10],
         "payment": "sberbank", "coin": "tether-bep20",
     },
-    "bybit": {"mode": "sequential", "value": 10},
+    "bybit": {"mode": "sequential", "value": 10, "max_amount": 100000},
 }
 
 
@@ -127,10 +127,11 @@ class UserSettingsStorage:
         return user_settings.get(exchange, DISPLAY_DEFAULTS.get(exchange, {}))
 
     def set_exchange_settings(self, user_id: int, exchange: str, mode: str, value,
-                              payment: str = None, coin: str = None):
+                              payment: str = None, coin: str = None,
+                              max_amount: int = None):
         """Сохраняет настройки отображения для конкретной биржи.
-        payment и coin актуальны только для BestChange.
-        Если payment/coin не переданы — существующие значения сохраняются."""
+        payment/coin актуальны для BestChange, max_amount — для Bybit.
+        Если необязательные параметры не переданы — существующие значения сохраняются."""
         data = self._read_data()
         users = data.get("users", {})
         if str(user_id) not in users:
@@ -140,10 +141,13 @@ class UserSettingsStorage:
         entry = {"mode": mode, "value": value}
         resolved_payment = payment if payment is not None else existing.get("payment")
         resolved_coin = coin if coin is not None else existing.get("coin")
+        resolved_max_amount = max_amount if max_amount is not None else existing.get("max_amount")
         if resolved_payment is not None:
             entry["payment"] = resolved_payment
         if resolved_coin is not None:
             entry["coin"] = resolved_coin
+        if resolved_max_amount is not None:
+            entry["max_amount"] = resolved_max_amount
         users[str(user_id)][exchange] = entry
         data["users"] = users
         self._write_data(data)

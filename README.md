@@ -145,10 +145,7 @@ nssm remove USDTBot confirm
 ## 🔄 Обновление проекта
 
 ```bash
-sudo systemctl stop usdt-bot
-git pull origin master
-venv/bin/pip install -r requirements.txt
-sudo systemctl start usdt-bot
+bash deploy.sh
 ```
 
 <details>

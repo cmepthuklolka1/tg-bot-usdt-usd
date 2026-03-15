@@ -71,6 +71,12 @@ echo
 echo "  Проверить статус:"
 echo "  sudo systemctl status $SERVICE_NAME"
 echo
+echo "  Перезапустить службу:"
+echo "  sudo systemctl restart $SERVICE_NAME"
+echo
+echo "  Обновить код и перезапустить (deploy):"
+echo "  bash $SCRIPT_DIR/deploy.sh"
+echo
 echo "  Просмотр логов в реальном времени:"
 echo "  sudo journalctl -u $SERVICE_NAME -f"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
