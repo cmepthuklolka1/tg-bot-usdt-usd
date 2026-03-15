@@ -33,7 +33,7 @@ EXCHANGE_LABELS = {
 
 PAYMENT_SLUGS = {
     "sberbank":  "Сбер",
-    "alfa-bank": "Альфа-Банк",
+    "alfaclick": "Альфа-Банк",
     "tinkoff":   "Т-Банк",
     "vtb":       "ВТБ",
 }

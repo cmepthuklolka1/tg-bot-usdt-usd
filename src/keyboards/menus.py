@@ -56,7 +56,7 @@ def get_settings_bc_payment_keyboard() -> InlineKeyboardMarkup:
     """Keyboard for choosing BestChange payment method (bank)."""
     buttons = [
         [InlineKeyboardButton(text="Сбербанк",   callback_data="bc_pay_sberbank")],
-        [InlineKeyboardButton(text="Альфа-Банк", callback_data="bc_pay_alfa-bank")],
+        [InlineKeyboardButton(text="Альфа-Банк", callback_data="bc_pay_alfaclick")],
         [InlineKeyboardButton(text="Т-Банк",     callback_data="bc_pay_tinkoff")],
         [InlineKeyboardButton(text="ВТБ",         callback_data="bc_pay_vtb")],
         [InlineKeyboardButton(text="◀️ Назад",   callback_data="settings_menu")],

@@ -37,6 +37,14 @@ async def fetch_bestchange_rates(
         response = await session.get(url, headers=HEADERS, timeout=15)
         response.raise_for_status()
 
+        # Защита: если BestChange не знает slug, он редиректит на главную
+        final_url = str(response.url)
+        if final_url.rstrip('/') == "https://www.bestchange.ru":
+            raise ValueError(
+                f"BestChange redirected to homepage — invalid slug pair: "
+                f"payment='{payment}', coin='{coin}'. URL was: {url}"
+            )
+
         soup = BeautifulSoup(response.content, 'html.parser')
         
         # The main exchange table on bestchange has id="content_table"
