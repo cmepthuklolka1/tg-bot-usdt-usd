@@ -161,6 +161,7 @@ async def cb_refresh_rates(callback: CallbackQuery):
 
     await callback.answer("Обновляю курсы...")
 
+    chat_id = callback.message.chat.id
     try:
         await callback.message.edit_text("⏳ Обновляю данные с бирж...")
         report_text = await generate_rates_report()
@@ -170,8 +171,29 @@ async def cb_refresh_rates(callback: CallbackQuery):
             parse_mode="HTML",
         )
     except Exception as e:
-        logger.error(f"Ошибка обновления курсов: {e}")
-        await callback.answer("Ошибка при обновлении.", show_alert=True)
+        # Сообщение удалено или недоступно — создаём новое и закрепляем
+        logger.warning(f"Сообщение с курсами недоступно ({chat_id}), создаём новое: {e}")
+        pinned_storage = PinnedMessageStorage()
+        pinned_storage.remove_pinned(chat_id)
+        try:
+            report_text = await generate_rates_report()
+            sent = await callback.bot.send_message(
+                chat_id=chat_id,
+                text=report_text,
+                reply_markup=get_rates_keyboard(),
+                parse_mode="HTML",
+            )
+            try:
+                await callback.bot.pin_chat_message(
+                    chat_id=chat_id,
+                    message_id=sent.message_id,
+                    disable_notification=True,
+                )
+            except Exception:
+                pass
+            pinned_storage.set_pinned(chat_id, sent.message_id)
+        except Exception as e2:
+            logger.error(f"Не удалось создать новое сообщение с курсами: {e2}")
 
 
 @router.callback_query(F.data == "back_to_main")
