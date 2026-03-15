@@ -343,11 +343,25 @@ async def cb_back_to_main(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     await callback.answer()
     is_admin = callback.from_user.id == config.admin_id
-    await callback.bot.send_message(
-        chat_id=callback.message.chat.id,
-        text="Главное меню:",
-        reply_markup=get_main_menu_keyboard(is_admin),
-    )
+
+    # Если кнопка нажата в закреплённом сообщении с курсами — создаём новое,
+    # иначе — редактируем текущее сообщение на месте.
+    chat_id = callback.message.chat.id
+    pinned_storage = PinnedMessageStorage()
+    pinned_msg_id = pinned_storage.get_all().get(str(chat_id))
+
+    if pinned_msg_id == callback.message.message_id:
+        await callback.bot.send_message(
+            chat_id=chat_id,
+            text="Главное меню:",
+            reply_markup=get_main_menu_keyboard(is_admin),
+        )
+    else:
+        await _edit_or_send(
+            callback,
+            "Главное меню:",
+            get_main_menu_keyboard(is_admin),
+        )
 
 
 # ─── Settings Helpers ────────────────────────────────────────

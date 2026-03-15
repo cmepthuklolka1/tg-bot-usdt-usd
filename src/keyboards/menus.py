@@ -15,10 +15,6 @@ def get_rates_keyboard() -> InlineKeyboardMarkup:
     """Keyboard under the exchange rates message."""
     buttons = [
         [InlineKeyboardButton(text="🔄 Обновить", callback_data="refresh_rates")],
-        [
-            InlineKeyboardButton(text="⚙️ BestChange", callback_data="settings_bestchange"),
-            InlineKeyboardButton(text="⚙️ Bybit P2P",  callback_data="settings_bybit"),
-        ],
         [InlineKeyboardButton(text="◀️ Назад в меню", callback_data="back_to_main")],
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
