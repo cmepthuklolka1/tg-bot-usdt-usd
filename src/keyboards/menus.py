@@ -15,7 +15,11 @@ def get_rates_keyboard() -> InlineKeyboardMarkup:
     """Keyboard under the exchange rates message."""
     buttons = [
         [InlineKeyboardButton(text="🔄 Обновить", callback_data="refresh_rates")],
-        [InlineKeyboardButton(text="◀️ Назад в меню", callback_data="back_to_main")]
+        [
+            InlineKeyboardButton(text="⚙️ BestChange", callback_data="settings_bestchange"),
+            InlineKeyboardButton(text="⚙️ Bybit P2P",  callback_data="settings_bybit"),
+        ],
+        [InlineKeyboardButton(text="◀️ Назад в меню", callback_data="back_to_main")],
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -52,6 +56,16 @@ def get_settings_input_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
+def get_settings_bc_menu_keyboard() -> InlineKeyboardMarkup:
+    """BestChange sub-menu: choose what to configure."""
+    buttons = [
+        [InlineKeyboardButton(text="🏦 Источник данных", callback_data="bc_section_source")],
+        [InlineKeyboardButton(text="📋 Настройки выдачи", callback_data="bc_section_display")],
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="settings_menu")],
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
 def get_settings_bc_payment_keyboard() -> InlineKeyboardMarkup:
     """Keyboard for choosing BestChange payment method (bank)."""
     buttons = [
@@ -59,7 +73,7 @@ def get_settings_bc_payment_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="Альфа-Банк", callback_data="bc_pay_alfaclick")],
         [InlineKeyboardButton(text="Т-Банк",     callback_data="bc_pay_tinkoff")],
         [InlineKeyboardButton(text="ВТБ",         callback_data="bc_pay_vtb")],
-        [InlineKeyboardButton(text="◀️ Назад",   callback_data="settings_menu")],
+        [InlineKeyboardButton(text="◀️ Назад",   callback_data="settings_bestchange")],
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 

@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 async def set_bot_commands(bot: Bot):
     admin_cmds = [
         BotCommand(command="start", description="Главное меню"),
+        BotCommand(command="settings", description="⚙️ Настройки отображения"),
         BotCommand(command="add_user", description="➕ Выдать доступ"),
         BotCommand(command="remove_user", description="⛔ Забрать доступ"),
         BotCommand(command="ban_seller", description="🚫 В ЧС (Bybit)"),
@@ -17,7 +18,8 @@ async def set_bot_commands(bot: Bot):
         BotCommand(command="cancel", description="❌ Отменить действие")
     ]
     user_cmds = [
-        BotCommand(command="start", description="Главное меню")
+        BotCommand(command="start", description="Главное меню"),
+        BotCommand(command="settings", description="⚙️ Настройки отображения"),
     ]
     
     try:

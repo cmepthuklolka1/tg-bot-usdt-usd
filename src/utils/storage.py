@@ -129,16 +129,21 @@ class UserSettingsStorage:
     def set_exchange_settings(self, user_id: int, exchange: str, mode: str, value,
                               payment: str = None, coin: str = None):
         """Сохраняет настройки отображения для конкретной биржи.
-        payment и coin актуальны только для BestChange."""
+        payment и coin актуальны только для BestChange.
+        Если payment/coin не переданы — существующие значения сохраняются."""
         data = self._read_data()
         users = data.get("users", {})
         if str(user_id) not in users:
             users[str(user_id)] = {}
+        # Берём текущие значения, чтобы не затирать поля которые не обновляем
+        existing = users[str(user_id)].get(exchange, DISPLAY_DEFAULTS.get(exchange, {}))
         entry = {"mode": mode, "value": value}
-        if payment is not None:
-            entry["payment"] = payment
-        if coin is not None:
-            entry["coin"] = coin
+        resolved_payment = payment if payment is not None else existing.get("payment")
+        resolved_coin = coin if coin is not None else existing.get("coin")
+        if resolved_payment is not None:
+            entry["payment"] = resolved_payment
+        if resolved_coin is not None:
+            entry["coin"] = resolved_coin
         users[str(user_id)][exchange] = entry
         data["users"] = users
         self._write_data(data)

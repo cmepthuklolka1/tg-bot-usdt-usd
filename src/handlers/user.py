@@ -12,7 +12,7 @@ from ..domain.models import ExchangeRateReport
 from ..keyboards.menus import (
     get_main_menu_keyboard, get_rates_keyboard,
     get_settings_exchange_keyboard, get_settings_mode_keyboard, get_settings_input_keyboard,
-    get_settings_bc_payment_keyboard, get_settings_bc_coin_keyboard,
+    get_settings_bc_menu_keyboard, get_settings_bc_payment_keyboard, get_settings_bc_coin_keyboard,
 )
 from ..services.cbrf import fetch_usd_rub_rate
 from ..services.bestchange import fetch_bestchange_rates
@@ -49,6 +49,7 @@ COIN_SLUGS = {
 # ─── FSM States ───────────────────────────────────────────────
 
 class SettingsStates(StatesGroup):
+    choosing_bc_section = State()   # sub-меню BestChange: источник / выдача
     choosing_bc_payment = State()
     choosing_bc_coin = State()
     choosing_mode = State()
@@ -136,6 +137,27 @@ def _format_settings_text(user_id: int) -> str:
     return "\n".join(lines)
 
 
+def _format_bc_menu_text(user_id: int) -> str:
+    """Форматирует текст суб-меню BestChange с текущими настройками."""
+    s = settings_storage.get_exchange_settings(user_id, "bestchange")
+    payment = s.get("payment", "sberbank")
+    coin = s.get("coin", "tether-bep20")
+    mode = s.get("mode", "positions")
+    value = s.get("value", [1, 10])
+    pay_label = PAYMENT_SLUGS.get(payment, payment)
+    coin_label = COIN_SLUGS.get(coin, coin)
+    if mode == "sequential":
+        display_desc = f"первые {value}"
+    else:
+        display_desc = f"позиции {', '.join(str(v) for v in value)}"
+    return (
+        f"<b>📈 BestChange — настройки</b>\n\n"
+        f"Источник: <b>{pay_label} → {coin_label}</b>\n"
+        f"Выдача: <b>{display_desc}</b>\n\n"
+        f"Что хотите изменить?"
+    )
+
+
 # ─── Report Generation ───────────────────────────────────────
 
 async def generate_rates_report(user_id: int | None = None) -> str:
@@ -186,7 +208,7 @@ async def generate_rates_report(user_id: int | None = None) -> str:
     return report.format_for_telegram()
 
 
-# ─── /start Command ──────────────────────────────────────────
+# ─── /start и /settings Commands ────────────────────────────
 
 @router.message(Command("start"))
 async def cmd_start(message: Message):
@@ -202,6 +224,20 @@ async def cmd_start(message: Message):
     is_admin = message.from_user.id == config.admin_id
     text = "Привет! Я приватный бот для мониторинга курсов USD/USDT.\nВыберите нужное действие в меню ниже:"
     await message.answer(text, reply_markup=get_main_menu_keyboard(is_admin))
+
+
+@router.message(Command("settings"))
+async def cmd_settings(message: Message, state: FSMContext):
+    if not storage.is_allowed(message.from_user.id):
+        await message.answer(
+            "🔒 <b>Доступ ограничен</b>",
+            parse_mode="HTML"
+        )
+        return
+
+    await state.clear()
+    text = _format_settings_text(message.from_user.id)
+    await message.answer(text, reply_markup=get_settings_exchange_keyboard(), parse_mode="HTML")
 
 
 # ─── Rates Handlers ──────────────────────────────────────────
@@ -359,19 +395,15 @@ async def cb_settings_exchange(callback: CallbackQuery, state: FSMContext):
     current = settings_storage.get_exchange_settings(callback.from_user.id, exchange)
 
     if exchange == "bestchange":
-        # Маршрут BestChange: сначала выбор банка
-        payment = current.get("payment", "sberbank")
-        coin = current.get("coin", "tether-bep20")
-        pay_label = PAYMENT_SLUGS.get(payment, payment)
-        coin_label = COIN_SLUGS.get(coin, coin)
-        await state.set_state(SettingsStates.choosing_bc_payment)
+        # BestChange: показываем суб-меню с выбором раздела
+        await state.set_state(SettingsStates.choosing_bc_section)
         await _edit_or_send(
             callback,
-            f"<b>{label}</b>\nТекущий источник: {pay_label} → {coin_label}\n\nВыберите способ оплаты:",
-            get_settings_bc_payment_keyboard(),
+            _format_bc_menu_text(callback.from_user.id),
+            get_settings_bc_menu_keyboard(),
         )
     else:
-        # Маршрут Bybit: сразу выбор режима
+        # Bybit: сразу выбор режима
         mode = current.get("mode", "sequential")
         value = current.get("value")
         if mode == "sequential":
@@ -386,6 +418,37 @@ async def cb_settings_exchange(callback: CallbackQuery, state: FSMContext):
         )
 
 
+@router.callback_query(SettingsStates.choosing_bc_section, F.data.in_({"bc_section_source", "bc_section_display"}))
+async def cb_settings_bc_section(callback: CallbackQuery, state: FSMContext):
+    """Обрабатывает выбор раздела настроек BestChange: источник данных или выдача."""
+    await callback.answer()
+    current = settings_storage.get_exchange_settings(callback.from_user.id, "bestchange")
+
+    if callback.data == "bc_section_source":
+        # → выбор банка
+        payment = current.get("payment", "sberbank")
+        coin = current.get("coin", "tether-bep20")
+        pay_label = PAYMENT_SLUGS.get(payment, payment)
+        coin_label = COIN_SLUGS.get(coin, coin)
+        await state.set_state(SettingsStates.choosing_bc_payment)
+        await _edit_or_send(
+            callback,
+            f"<b>BestChange — источник данных</b>\nТекущий: {pay_label} → {coin_label}\n\nВыберите банк:",
+            get_settings_bc_payment_keyboard(),
+        )
+    else:
+        # → выбор режима выдачи
+        mode = current.get("mode", "positions")
+        value = current.get("value", [1, 10])
+        current_desc = f"первые {value}" if mode == "sequential" else f"позиции {', '.join(str(v) for v in value)}"
+        await state.set_state(SettingsStates.choosing_mode)
+        await _edit_or_send(
+            callback,
+            f"<b>BestChange — выдача</b>\nТекущая настройка: {current_desc}\n\nВыберите режим отображения:",
+            get_settings_mode_keyboard(),
+        )
+
+
 @router.callback_query(SettingsStates.choosing_bc_payment, F.data.startswith("bc_pay_"))
 async def cb_settings_bc_payment(callback: CallbackQuery, state: FSMContext):
     payment = callback.data.removeprefix("bc_pay_")
@@ -394,42 +457,45 @@ async def cb_settings_bc_payment(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
     pay_label = PAYMENT_SLUGS.get(payment, payment)
-    data = await state.get_data()
     current = settings_storage.get_exchange_settings(callback.from_user.id, "bestchange")
+    data = await state.get_data()
     coin = data.get("coin") or current.get("coin", "tether-bep20")
     coin_label = COIN_SLUGS.get(coin, coin)
 
     await _edit_or_send(
         callback,
-        f"<b>BestChange</b>\nСпособ оплаты: {pay_label}\nТекущий актив: {coin_label}\n\nВыберите актив:",
+        f"<b>BestChange — источник данных</b>\nБанк: {pay_label}\nТекущий актив: {coin_label}\n\nВыберите актив:",
         get_settings_bc_coin_keyboard(),
     )
 
 
 @router.callback_query(SettingsStates.choosing_bc_coin, F.data.startswith("bc_coin_"))
 async def cb_settings_bc_coin(callback: CallbackQuery, state: FSMContext):
+    """Сохраняет источник данных (банк + монета) и возвращает в bc-меню."""
     coin = callback.data.removeprefix("bc_coin_")
-    await state.update_data(coin=coin)
-    await state.set_state(SettingsStates.choosing_mode)
     await callback.answer()
 
     data = await state.get_data()
     payment = data.get("payment", "sberbank")
+
+    # Сохраняем только источник (payment+coin); mode/value берутся из существующих настроек
+    existing = settings_storage.get_exchange_settings(callback.from_user.id, "bestchange")
+    settings_storage.set_exchange_settings(
+        callback.from_user.id, "bestchange",
+        mode=existing.get("mode", "positions"),
+        value=existing.get("value", [1, 10]),
+        payment=payment, coin=coin,
+    )
+
     pay_label = PAYMENT_SLUGS.get(payment, payment)
     coin_label = COIN_SLUGS.get(coin, coin)
 
-    current = settings_storage.get_exchange_settings(callback.from_user.id, "bestchange")
-    mode = current.get("mode", "sequential")
-    value = current.get("value")
-    if mode == "sequential":
-        current_desc = f"первые {value}"
-    else:
-        current_desc = f"позиции {', '.join(str(v) for v in value)}"
-
+    await state.set_state(SettingsStates.choosing_bc_section)
     await _edit_or_send(
         callback,
-        f"<b>BestChange</b>\nИсточник: {pay_label} → {coin_label}\nТекущий режим: {current_desc}\n\nВыберите режим отображения:",
-        get_settings_mode_keyboard(),
+        f"✅ Источник сохранён: <b>{pay_label} → {coin_label}</b>\n\n"
+        + _format_bc_menu_text(callback.from_user.id),
+        get_settings_bc_menu_keyboard(),
     )
 
 
@@ -516,21 +582,27 @@ async def process_settings_value(message: Message, state: FSMContext):
                                                payment=payment, coin=coin)
         desc = f"позиции {', '.join(str(v) for v in value)}"
 
-    await state.clear()
+    # После сохранения: BestChange → bc-меню, Bybit → главные настройки
+    if exchange == "bestchange":
+        await state.set_state(SettingsStates.choosing_bc_section)
+        confirm_text = f"✅ Выдача сохранена: <b>{desc}</b>\n\n" + _format_bc_menu_text(message.from_user.id)
+        reply_markup = get_settings_bc_menu_keyboard()
+    else:
+        await state.clear()
+        confirm_text = f"✅ <b>{label}</b> — настроено: {desc}\n\n" + _format_settings_text(message.from_user.id)
+        reply_markup = get_settings_exchange_keyboard()
 
-    # Редактируем сообщение с настройками: показываем подтверждение + текущие настройки
-    confirm_text = f"✅ <b>{label}</b> — настроено: {desc}\n\n" + _format_settings_text(message.from_user.id)
     try:
         await message.bot.edit_message_text(
             chat_id=message.chat.id,
             message_id=settings_msg_id,
             text=confirm_text,
-            reply_markup=get_settings_exchange_keyboard(),
+            reply_markup=reply_markup,
             parse_mode="HTML",
         )
     except Exception:
         await message.answer(
             confirm_text,
-            reply_markup=get_settings_exchange_keyboard(),
+            reply_markup=reply_markup,
             parse_mode="HTML",
         )
