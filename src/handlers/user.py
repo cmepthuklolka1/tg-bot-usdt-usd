@@ -72,11 +72,11 @@ async def _get_actual_pinned_id(bot, chat_id: int) -> int | None:
 
 
 def _format_bc_line(offer) -> str:
-    return f"{offer.rate:.2f} ₽  {offer.exchanger_name}"
+    return f"{offer.rate:>6.2f} ₽  {offer.exchanger_name}"
 
 
 def _format_bybit_line(item) -> str:
-    return f"{item.price:.2f} ₽  {item.nickName}"
+    return f"{item.price:>6.2f} ₽  {item.nickName}"
 
 
 def _apply_display_settings(items: list, settings: dict, format_fn) -> list[tuple[int, str]]:
