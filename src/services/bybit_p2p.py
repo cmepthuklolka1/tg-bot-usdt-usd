@@ -31,9 +31,8 @@ PAYMENT_IDS = list(WANTED_PAYMENT_IDS)
 from ..utils.storage import BannedSellersStorage
 banned_storage = BannedSellersStorage()
 
-# We filter sellers by total USDT stock value in RUB: quantity * price >= 100_000 RUB
-# This ensures we only show sellers who have enough USDT to cover a 100k RUB order
-MIN_STOCK_VALUE_RUB = 100_000.0
+# Minimum order limit: only show sellers who accept orders of at least 100k RUB
+MIN_ORDER_LIMIT_RUB = 100_000.0
 
 # side=1 means "Buy USDT" (user sells RUB, buys USDT)
 PAYLOAD = {
@@ -77,14 +76,14 @@ async def fetch_bybit_p2p_rates() -> list[P2PItem]:
         banned_lower = {name.lower() for name in banned_storage.get_banned()}
         filtered = [
             item for item in items
-            if item.quantity * item.price >= MIN_STOCK_VALUE_RUB
+            if item.maxAmount >= MIN_ORDER_LIMIT_RUB
             and bool(set(item.payments) & WANTED_PAYMENT_IDS)
             and item.nickName.lower() not in banned_lower
         ]
 
         logger.info(
-            f"Bybit P2P: {len(items)} total, {len(filtered)} after stock >= "
-            f"{MIN_STOCK_VALUE_RUB:.0f} RUB + payment whitelist + ban filter"
+            f"Bybit P2P: {len(items)} total, {len(filtered)} after maxAmount >= "
+            f"{MIN_ORDER_LIMIT_RUB:.0f} RUB + payment whitelist + ban filter"
         )
         return filtered
 
