@@ -54,6 +54,7 @@ class SettingsStates(StatesGroup):
     choosing_bc_payment = State()
     choosing_bc_coin = State()
     choosing_bybit_section = State()   # sub-меню Bybit: сумма сделки / выдача
+    waiting_for_bybit_amount = State() # ввод произвольной суммы Bybit
     choosing_mode = State()
     waiting_for_value = State()
 
@@ -573,6 +574,23 @@ async def cb_settings_bybit_section(callback: CallbackQuery, state: FSMContext):
         )
 
 
+@router.callback_query(SettingsStates.choosing_bybit_section, F.data == "bybit_amount_custom")
+async def cb_settings_bybit_amount_custom(callback: CallbackQuery, state: FSMContext):
+    """Переходит к ручному вводу суммы сделки."""
+    await callback.answer()
+    await state.set_state(SettingsStates.waiting_for_bybit_amount)
+    current = settings_storage.get_exchange_settings(callback.from_user.id, "bybit")
+    current_label = _format_amount_label(current.get("max_amount", 100000))
+    await _edit_or_send(
+        callback,
+        f"<b>Bybit P2P — сумма сделки</b>\n"
+        f"Текущая: <b>{current_label}</b>\n\n"
+        f"Введите сумму в рублях (целое число, минимум 1000):\n"
+        f"Например: <b>150000</b>",
+        get_settings_input_keyboard(),
+    )
+
+
 @router.callback_query(SettingsStates.choosing_bybit_section, F.data.startswith("bybit_amount_"))
 async def cb_settings_bybit_amount(callback: CallbackQuery, state: FSMContext):
     """Сохраняет выбранную сумму сделки и возвращает в суб-меню Bybit."""
@@ -596,6 +614,72 @@ async def cb_settings_bybit_amount(callback: CallbackQuery, state: FSMContext):
         + _format_bybit_menu_text(callback.from_user.id),
         get_settings_bybit_menu_keyboard(),
     )
+
+
+@router.message(SettingsStates.waiting_for_bybit_amount)
+async def process_bybit_amount_value(message: Message, state: FSMContext):
+    """Обрабатывает ввод произвольной суммы сделки для Bybit."""
+    try:
+        await message.delete()
+    except Exception:
+        pass
+
+    data = await state.get_data()
+    settings_msg_id = data.get("settings_msg_id")
+
+    async def show_error(err: str):
+        prompt = (
+            "Введите сумму в рублях (целое число, минимум 1000):\n"
+            "Например: <b>150000</b>"
+        )
+        full = f"{err}\n\n{prompt}"
+        try:
+            await message.bot.edit_message_text(
+                chat_id=message.chat.id,
+                message_id=settings_msg_id,
+                text=full,
+                reply_markup=get_settings_input_keyboard(),
+                parse_mode="HTML",
+            )
+        except Exception:
+            await message.answer(full, reply_markup=get_settings_input_keyboard(), parse_mode="HTML")
+
+    text = (message.text or "").strip()
+    if not text.isdigit() or int(text) < 1:
+        await show_error("❌ Введите положительное целое число (например: <b>150000</b>).")
+        return
+    amount = int(text)
+    if amount < 1000:
+        await show_error("❌ Минимальная сумма — <b>1 000 ₽</b>.")
+        return
+    if amount > 100_000_000:
+        await show_error("❌ Максимальная сумма — <b>100 000 000 ₽</b>.")
+        return
+
+    existing = settings_storage.get_exchange_settings(message.from_user.id, "bybit")
+    settings_storage.set_exchange_settings(
+        message.from_user.id, "bybit",
+        mode=existing.get("mode", "sequential"),
+        value=existing.get("value", 10),
+        max_amount=amount,
+    )
+
+    amount_label = _format_amount_label(amount) if amount % 1000 == 0 else f"{amount:,}".replace(",", " ")
+    await state.set_state(SettingsStates.choosing_bybit_section)
+    confirm_text = (
+        f"✅ Сумма сохранена: <b>{amount_label} ₽</b>\n\n"
+        + _format_bybit_menu_text(message.from_user.id)
+    )
+    try:
+        await message.bot.edit_message_text(
+            chat_id=message.chat.id,
+            message_id=settings_msg_id,
+            text=confirm_text,
+            reply_markup=get_settings_bybit_menu_keyboard(),
+            parse_mode="HTML",
+        )
+    except Exception:
+        await message.answer(confirm_text, reply_markup=get_settings_bybit_menu_keyboard(), parse_mode="HTML")
 
 
 @router.callback_query(SettingsStates.choosing_mode, F.data.in_({"mode_sequential", "mode_positions"}))

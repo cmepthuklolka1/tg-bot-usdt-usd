@@ -103,7 +103,7 @@ def get_settings_bybit_amount_keyboard() -> InlineKeyboardMarkup:
          InlineKeyboardButton(text="100K", callback_data="bybit_amount_100000")],
         [InlineKeyboardButton(text="200K", callback_data="bybit_amount_200000"),
          InlineKeyboardButton(text="500K", callback_data="bybit_amount_500000")],
-        [InlineKeyboardButton(text="1M",   callback_data="bybit_amount_1000000")],
+        [InlineKeyboardButton(text="✏️ Своё значение", callback_data="bybit_amount_custom")],
         [InlineKeyboardButton(text="◀️ Назад", callback_data="settings_bybit")],
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
