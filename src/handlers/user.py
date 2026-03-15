@@ -109,37 +109,9 @@ async def cb_show_rates(callback: CallbackQuery):
 
     pinned_storage = PinnedMessageStorage()
     chat_id = callback.message.chat.id
-    stored_msg_id = pinned_storage.get_all().get(str(chat_id))
+    old_msg_id = pinned_storage.get_all().get(str(chat_id))
 
-    # Проверяем, какое сообщение реально закреплено в Telegram
-    actual_pinned_id = await _get_actual_pinned_id(callback.bot, chat_id)
-    logger.info(f"show_rates: chat_id={chat_id}, stored={stored_msg_id}, actual_pinned={actual_pinned_id}")
-
-    # Обновляем существующее, только если оно реально закреплено
-    if stored_msg_id and actual_pinned_id == stored_msg_id:
-        try:
-            await callback.bot.edit_message_text(
-                chat_id=chat_id,
-                message_id=stored_msg_id,
-                text="⏳ Загружаю данные с бирж...",
-            )
-            report_text = await generate_rates_report()
-            await callback.bot.edit_message_text(
-                chat_id=chat_id,
-                message_id=stored_msg_id,
-                text=report_text,
-                reply_markup=get_rates_keyboard(),
-                parse_mode="HTML",
-            )
-            return
-        except Exception as e:
-            logger.warning(f"Не удалось обновить закреплённое сообщение {stored_msg_id}: {e}")
-
-    # Stored ID устарел или отсутствует — очищаем и создаём новое
-    if stored_msg_id:
-        pinned_storage.remove_pinned(chat_id)
-
-    # Отправляем новое сообщение и закрепляем
+    # Всегда отправляем новое сообщение (чтобы оно было внизу чата)
     try:
         sent = await callback.bot.send_message(
             chat_id=chat_id,
@@ -163,6 +135,12 @@ async def cb_show_rates(callback: CallbackQuery):
         except Exception as e:
             logger.warning(f"Не удалось закрепить сообщение для {chat_id}: {e}")
         pinned_storage.set_pinned(chat_id, sent.message_id)
+        # Удаляем старое сообщение с курсами (чтобы не было дубликатов)
+        if old_msg_id:
+            try:
+                await callback.bot.delete_message(chat_id=chat_id, message_id=old_msg_id)
+            except Exception:
+                pass  # >48ч или уже удалено — не страшно
     except Exception as e:
         logger.error(f"Ошибка отправки курсов: {e}")
         await callback.bot.send_message(
