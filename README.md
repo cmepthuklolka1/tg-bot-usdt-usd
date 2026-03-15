@@ -63,7 +63,7 @@ ADMIN_ID=ваш_telegram_id
 ```
 
 <details>
-<summary>🪟 Установка на Windows</summary>
+<summary>🖥️ Установка на Windows</summary>
 
 ```bat
 python -m venv venv
@@ -118,7 +118,7 @@ sudo journalctl -u usdt-bot -f
 ```
 
 <details>
-<summary>🪟 Управление службой на Windows (NSSM)</summary>
+<summary>🖥️ Управление службой на Windows (NSSM)</summary>
 
 Установите [NSSM](https://nssm.cc/), затем в командной строке с правами администратора:
 
@@ -146,17 +146,17 @@ nssm remove USDTBot confirm
 
 ```bash
 sudo systemctl stop usdt-bot
-git pull origin main
+git pull origin master
 venv/bin/pip install -r requirements.txt
 sudo systemctl start usdt-bot
 ```
 
 <details>
-<summary>🪟 Обновление на Windows</summary>
+<summary>🖥️ Обновление на Windows</summary>
 
 ```bat
 nssm stop USDTBot
-git pull origin main
+git pull origin master
 venv\Scripts\pip install -r requirements.txt
 nssm start USDTBot
 ```
