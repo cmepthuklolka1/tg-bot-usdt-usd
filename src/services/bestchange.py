@@ -53,12 +53,13 @@ async def fetch_bestchange_rates(
         rows = tbody.find_all('tr', recursive=False)
         
         valid_offers = []
+        seen_names: set[str] = set()  # Дедупликация: один обменник → одно лучшее предложение
         for row in rows:
             # Rows might not have classes, let's just attempt extraction
             tds = row.find_all('td')
             if len(tds) < 4:
                 continue
-                
+
             # Column 1: Exchanger name
             # The .bj div contains an <a> tag with the name, followed by <span> tooltip badges.
             # We take only the <a> tag text to avoid tooltip pollution.
@@ -69,27 +70,34 @@ async def fetch_bestchange_rates(
             else:
                 # Fallback: first line of text
                 exchanger_name = tds[1].get_text(separator='\n').split('\n')[0].strip()
-                
+
             if not exchanger_name:
                 continue
-            
+
+            # Пропускаем дубли: BestChange может показывать один обменник несколько раз
+            # (разные лимиты/резервы). Таблица отсортирована по курсу — первое вхождение лучшее.
+            name_key = exchanger_name.lower()
+            if name_key in seen_names:
+                continue
+            seen_names.add(name_key)
+
             # Column 2: Give (RUB)
             give_td = tds[2]
             give_fs = give_td.find('div', class_='fs')
             give_text = give_fs.text if give_fs else give_td.text
             # Remove currency label (e.g. "Сбербанк RUB", "Альфа-Банк RUB")
             give_text = give_text.split('RUB')[0].strip()
-            
+
             # Column 3: Get (USDT)
             get_td = tds[3]
             get_fs = get_td.find('div', class_='fs')
             get_text = get_fs.text if get_fs else get_td.text
             get_text = get_text.split('USDT')[0].strip()
-            
+
             try:
                 give_val = clean_float(give_text)
                 get_val = clean_float(get_text)
-                
+
                 valid_offers.append(
                     ExchangerOffer(
                         exchanger_name=exchanger_name,
@@ -101,7 +109,7 @@ async def fetch_bestchange_rates(
             except ValueError:
                 continue # Skip rows that couldn't be parsed
 
-        logger.info(f"BestChange ({payment} → {coin}): {len(valid_offers)} valid offers parsed")
+        logger.info(f"BestChange ({payment} → {coin}): {len(valid_offers)} unique offers parsed")
         return BestChangeRates(offers=valid_offers)
 
     except Exception as e:
