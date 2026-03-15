@@ -41,6 +41,39 @@ async def auto_update_task(bot: Bot):
                 chat_id = int(str_chat_id)
                 if not whitelist.is_allowed(chat_id):
                     continue
+
+                # Проверяем, реально ли сообщение закреплено в Telegram
+                actual_pinned_id = None
+                try:
+                    chat_info = await bot.get_chat(chat_id)
+                    if chat_info.pinned_message:
+                        actual_pinned_id = chat_info.pinned_message.message_id
+                except Exception:
+                    pass
+
+                if actual_pinned_id != msg_id:
+                    logger.warning(f"Stored msg {msg_id} не закреплён в {chat_id} (pinned={actual_pinned_id}), пересоздаём")
+                    pinned_storage.remove_pinned(chat_id)
+                    try:
+                        sent = await bot.send_message(
+                            chat_id=chat_id,
+                            text=report_text,
+                            reply_markup=get_rates_keyboard(),
+                            parse_mode="HTML",
+                        )
+                        try:
+                            await bot.pin_chat_message(
+                                chat_id=chat_id,
+                                message_id=sent.message_id,
+                                disable_notification=True,
+                            )
+                        except Exception:
+                            pass
+                        pinned_storage.set_pinned(chat_id, sent.message_id)
+                    except Exception as e2:
+                        logger.error(f"Не удалось восстановить сообщение для {chat_id}: {e2}")
+                    continue
+
                 try:
                     await bot.edit_message_text(
                         chat_id=chat_id,
@@ -51,7 +84,7 @@ async def auto_update_task(bot: Bot):
                     )
                 except Exception as e:
                     logger.warning(f"Не удалось обновить сообщение для {chat_id}: {e}")
-                    # Сообщение удалено — отправляем новое и закрепляем
+                    pinned_storage.remove_pinned(chat_id)
                     try:
                         sent = await bot.send_message(
                             chat_id=chat_id,

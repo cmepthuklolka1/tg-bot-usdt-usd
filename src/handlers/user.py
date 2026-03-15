@@ -18,6 +18,17 @@ logger = logging.getLogger(__name__)
 storage = WhitelistStorage()
 
 
+async def _get_actual_pinned_id(bot, chat_id: int) -> int | None:
+    """Возвращает message_id реально закреплённого сообщения в Telegram, или None."""
+    try:
+        chat_info = await bot.get_chat(chat_id)
+        if chat_info.pinned_message:
+            return chat_info.pinned_message.message_id
+    except Exception:
+        pass
+    return None
+
+
 def _pad_to_width(s: str, width: int) -> str:
     """Обрезает строку до визуальной ширины width и добивает пробелами.
     Emoji и иероглифы ('W', 'F') = 2 единицы, остальные символы = 1."""
@@ -98,30 +109,36 @@ async def cb_show_rates(callback: CallbackQuery):
 
     pinned_storage = PinnedMessageStorage()
     chat_id = callback.message.chat.id
-    existing_msg_id = pinned_storage.get_all().get(str(chat_id))
+    stored_msg_id = pinned_storage.get_all().get(str(chat_id))
 
-    # Если уже есть закреплённое сообщение с курсами — обновляем его
-    if existing_msg_id:
+    # Проверяем, какое сообщение реально закреплено в Telegram
+    actual_pinned_id = await _get_actual_pinned_id(callback.bot, chat_id)
+
+    # Обновляем существующее, только если оно реально закреплено
+    if stored_msg_id and actual_pinned_id == stored_msg_id:
         try:
             await callback.bot.edit_message_text(
                 chat_id=chat_id,
-                message_id=existing_msg_id,
+                message_id=stored_msg_id,
                 text="⏳ Загружаю данные с бирж...",
             )
             report_text = await generate_rates_report()
             await callback.bot.edit_message_text(
                 chat_id=chat_id,
-                message_id=existing_msg_id,
+                message_id=stored_msg_id,
                 text=report_text,
                 reply_markup=get_rates_keyboard(),
                 parse_mode="HTML",
             )
             return
         except Exception as e:
-            logger.warning(f"Не удалось обновить закреплённое сообщение {existing_msg_id}: {e}")
-            pinned_storage.remove_pinned(chat_id)
+            logger.warning(f"Не удалось обновить закреплённое сообщение {stored_msg_id}: {e}")
 
-    # Нет закреплённого сообщения (или оно было удалено) — отправляем новое
+    # Stored ID устарел или отсутствует — очищаем и создаём новое
+    if stored_msg_id:
+        pinned_storage.remove_pinned(chat_id)
+
+    # Отправляем новое сообщение и закрепляем
     try:
         sent = await callback.bot.send_message(
             chat_id=chat_id,
