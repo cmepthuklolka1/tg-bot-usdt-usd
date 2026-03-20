@@ -43,14 +43,17 @@ class RateSection(BaseModel):
 
 class ExchangeRateReport(BaseModel):
     cbrf_rate: float
+    abcex_rate: float | None = None
     sections: list[RateSection] = Field(default_factory=list)
     timestamp: datetime = Field(default_factory=datetime.now)
 
     def format_for_telegram(self) -> str:
         text = [
             f"<b>Курс ЦБ РФ:</b> {self.cbrf_rate:.2f} ₽/$",
-            "",
         ]
+        if self.abcex_rate is not None:
+            text.append(f"<b>Последняя цена ABCEX:</b> {self.abcex_rate:.2f} ₽/USDT")
+        text.append("")
 
         for section in self.sections:
             text.append(f"<b>{section.label}</b>")
