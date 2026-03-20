@@ -12,6 +12,7 @@ from src.utils.commands import set_bot_commands
 from src.utils.storage import PinnedMessageStorage, WhitelistStorage
 from src.handlers.user import generate_rates_report
 from src.keyboards.menus import get_rates_keyboard
+from src.services.antarctic import token_manager
 
 logging.basicConfig(
     level=logging.INFO,
@@ -120,6 +121,7 @@ async def main():
 
     logger.info("Запуск Telegram-бота...")
     bot = Bot(token=config.bot_token)
+    token_manager.set_bot(bot)
     dp = Dispatcher()
 
     # Регистрируем роутеры (обработчики)

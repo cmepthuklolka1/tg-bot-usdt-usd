@@ -20,8 +20,8 @@ class Settings(BaseSettings):
     # User display settings
     user_settings_path: Path = Field(default=BASE_DIR / 'config' / 'user_settings.json')
 
-    # Antarctic Wallet token
-    antarctic_token: str = Field(default="", env='ANTARCTIC_TOKEN')
+    # Antarctic Wallet tokens file
+    antarctic_tokens_path: Path = Field(default=BASE_DIR / 'config' / 'antarctic_tokens.json')
 
     # Wait configurations for fetching
     fetch_timeout: int = Field(default=15)

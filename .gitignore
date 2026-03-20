@@ -19,6 +19,7 @@ config/whitelist.json
 config/banned_sellers.json
 config/pinned_messages.json
 config/user_settings.json
+config/antarctic_tokens.json
 
 # Логи
 *.log
