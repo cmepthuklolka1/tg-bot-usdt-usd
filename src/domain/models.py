@@ -44,6 +44,7 @@ class RateSection(BaseModel):
 class ExchangeRateReport(BaseModel):
     cbrf_rate: float
     abcex_rate: float | None = None
+    antarctic_sell_rate: float | None = None
     sections: list[RateSection] = Field(default_factory=list)
     timestamp: datetime = Field(default_factory=datetime.now)
 
@@ -53,6 +54,8 @@ class ExchangeRateReport(BaseModel):
         ]
         if self.abcex_rate is not None:
             text.append(f"<b>Последняя цена на ABCEX:</b> {self.abcex_rate:.2f} ₽")
+        if self.antarctic_sell_rate is not None:
+            text.append(f"<b>Antarctic SELL:</b>  {self.antarctic_sell_rate:.2f} ₽")
         text.append("")
 
         for section in self.sections:
