@@ -4,7 +4,7 @@
 [![aiogram](https://img.shields.io/badge/aiogram-3.x-blue)](https://docs.aiogram.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
-Приватный Telegram-бот для мониторинга актуальных курсов USDT/RUB. Агрегирует данные из трёх источников и автоматически обновляет закреплённое сообщение каждый час.
+Приватный Telegram-бот для мониторинга актуальных курсов USDT/RUB. Агрегирует данные из нескольких источников и автоматически обновляет закреплённое сообщение каждый час.
 
 ---
 
@@ -13,8 +13,10 @@
 | Источник | Что парсим |
 |---|---|
 | **ЦБ РФ** | Официальный курс USD/RUB |
-| **BestChange.ru** | Топ-1 и топ-10 обменников Сбер → USDT BEP20 |
-| **Bybit P2P** | Топ-10 продавцов USDT за RUB (лимит ≥ 100 000 ₽) |
+| **ABCEX** | Последняя цена USDT/RUB на бирже |
+| **Antarctic Wallet** | Курс продажи USDT/RUB |
+| **BestChange.ru** | Топ обменников (2 таблицы с независимыми настройками) |
+| **Bybit P2P** | Топ продавцов USDT за RUB (2 таблицы с независимыми настройками) |
 
 ---
 
@@ -61,6 +63,11 @@ nano .env
 BOT_TOKEN=ваш_токен_от_BotFather
 ADMIN_ID=ваш_telegram_id
 ```
+
+### 4. Настройте Antarctic Wallet (опционально)
+
+Для получения курса USDT/RUB с Antarctic Wallet нужно создать файл с токенами авторизации.
+Подробная инструкция — в разделе [🔑 Настройка Antarctic Wallet](#-настройка-antarctic-wallet).
 
 <details>
 <summary>🖥️ Установка на Windows</summary>
@@ -162,18 +169,80 @@ nssm start USDTBot
 
 ---
 
+## 🔑 Настройка Antarctic Wallet
+
+Бот может показывать курс продажи USDT/RUB с [Antarctic Wallet](https://app.antarcticwallet.com). Для этого нужны токены авторизации. Бот **автоматически обновляет** токены — вручную это нужно сделать только один раз (и повторить, если бот был выключен более 5 дней).
+
+### Шаг 1. Авторизуйтесь на сайте
+
+Откройте в браузере Chrome: `https://app.antarcticwallet.com/home` и войдите в аккаунт.
+
+### Шаг 2. Получите токены
+
+#### Способ A — Быстрый (через консоль браузера)
+
+1. На странице Antarctic Wallet нажмите **F12** (откроются DevTools)
+2. Перейдите на вкладку **Console**
+3. Вставьте эту команду и нажмите Enter:
+
+```js
+JSON.stringify((()=>{const d=Object.keys(localStorage).map(k=>{try{const v=JSON.parse(localStorage.getItem(k));if(v?.state?.jwt?.accessToken)return v.state.jwt}catch{}return null}).find(Boolean);return d?{access_token:d.accessToken,refresh_token:d.refreshToken}:"Токены не найдены"})(),null,2)
+```
+
+4. Скопируйте результат — это готовый JSON с обоими токенами
+
+#### Способ B — Ручной (через DevTools)
+
+1. На странице Antarctic Wallet нажмите **F12** (откроются DevTools)
+2. Перейдите на вкладку **Application**
+3. В левой панели: **Local Storage** → `https://app.antarcticwallet.com`
+4. В таблице справа найдите ключ, содержащий данные авторизации (обычно это Pinia-стор)
+5. Кликните на него — в значении будет JSON-объект
+6. Найдите внутри объект `jwt` с полями:
+   - `accessToken` — длинная строка (начинается с `eyJ...`)
+   - `refreshToken` — короткая hex-строка (32 символа)
+
+### Шаг 3. Создайте файл токенов
+
+Создайте файл `config/antarctic_tokens.json` в корне проекта:
+
+```bash
+nano config/antarctic_tokens.json
+```
+
+Вставьте данные в формате:
+
+```json
+{
+  "access_token": "eyJhbGciOiJSUzI1NiJ9.eyJ1c2Vy...(ваш длинный токен)",
+  "refresh_token": "a1b2c3d4e5f6...(ваш 32-символьный токен)"
+}
+```
+
+### Автообновление
+
+После первоначальной настройки бот **сам обновляет токены** за 24 часа до их истечения. Новые токены автоматически сохраняются в тот же файл. Если бот был выключен более 5 дней и токены протухли — бот отправит администратору уведомление в Telegram, и процедуру нужно повторить.
+
+---
+
 ## 📁 Структура проекта
 
 ```
 tg-bot-usdt-usd/
 ├── main.py                     # Точка входа + фоновое автообновление
 ├── install.sh                  # Скрипт установки для Linux
+├── deploy.sh                   # Скрипт обновления (git pull + restart)
 ├── requirements.txt
 ├── .env.example                # Шаблон переменных окружения
 ├── config/
 │   ├── whitelist.example.json  # Шаблон вайтлиста
 │   ├── banned_sellers.example.json
-│   └── pinned_messages.example.json
+│   ├── pinned_messages.example.json
+│   └── antarctic_tokens.json   # Токены Antarctic Wallet (создаётся вручную)
+├── scripts/
+│   ├── test_abcex.py           # Тест парсинга ABCEX
+│   ├── test_antarctic.py       # Тест парсинга Antarctic Wallet
+│   └── test_antarctic_refresh.py # Тест обновления токенов
 └── src/
     ├── config.py               # Настройки приложения
     ├── domain/
@@ -185,10 +254,12 @@ tg-bot-usdt-usd/
     │   └── menus.py            # Inline-клавиатуры
     ├── services/
     │   ├── cbrf.py             # Парсинг ЦБ РФ (XML)
+    │   ├── abcex.py            # ABCEX API (lastPrice USDT/RUB)
+    │   ├── antarctic.py        # Antarctic Wallet API + auto-refresh токенов
     │   ├── bestchange.py       # Парсинг BestChange (HTML)
     │   └── bybit_p2p.py        # Bybit P2P API (JSON)
     └── utils/
-        ├── storage.py          # JSON-хранилище (вайтлист, бан-лист, сообщения)
+        ├── storage.py          # JSON-хранилище (вайтлист, бан-лист, настройки)
         └── commands.py         # Регистрация команд бота
 ```
 
