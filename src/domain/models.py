@@ -52,7 +52,7 @@ class ExchangeRateReport(BaseModel):
             f"<b>Курс ЦБ РФ:</b> {self.cbrf_rate:.2f} ₽/$",
         ]
         if self.abcex_rate is not None:
-            text.append(f"<b>Последняя цена ABCEX:</b> {self.abcex_rate:.2f} ₽/USD\u200bT")
+            text.append(f"<b>Последняя цена на ABCEX:</b> {self.abcex_rate:.2f} ₽")
         text.append("")
 
         for section in self.sections:
