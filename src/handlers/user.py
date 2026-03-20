@@ -42,10 +42,10 @@ PAYMENT_SLUGS = {
 }
 
 COIN_SLUGS = {
-    "tether-erc20": "USDT ERC20",
-    "tether-trc20": "USDT TRC20",
-    "tether-bep20": "USDT BEP20",
-    "tether-ton":   "USDT TON",
+    "tether-erc20": "USD\u200bT ERC20",
+    "tether-trc20": "USD\u200bT TRC20",
+    "tether-bep20": "USD\u200bT BEP20",
+    "tether-ton":   "USD\u200bT TON",
 }
 
 
@@ -235,7 +235,7 @@ async def generate_rates_report(user_id: int | None = None) -> str:
         except Exception as e:
             logger.error(f"Generate report {key} error: {e}")
         amount_label = _format_amount_label(by_max_amount)
-        bybit_label = f"Bybit P2P (USDT/RUB) [{amount_label}]"
+        bybit_label = f"Bybit P2P (USD\u200bT/RUB) [{amount_label}]"
         sections.append(RateSection(label=bybit_label, items=items))
 
     report = ExchangeRateReport(
@@ -261,7 +261,7 @@ async def cmd_start(message: Message):
         return
 
     is_admin = message.from_user.id == config.admin_id
-    text = "Привет! Я приватный бот для мониторинга курсов USD/USDT.\nВыберите нужное действие в меню ниже:"
+    text = "Привет! Я приватный бот для мониторинга курсов USD/USD\u200bT.\nВыберите нужное действие в меню ниже:"
     await message.answer(text, reply_markup=get_main_menu_keyboard(is_admin))
 
 
