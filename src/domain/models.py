@@ -46,6 +46,7 @@ class ExchangeRateReport(BaseModel):
     abcex_buy: float | None = None
     abcex_sell: float | None = None
     antarctic_onramp_rate: float | None = None
+    owb_usdc_price: float | None = None
     sections: list[RateSection] = Field(default_factory=list)
     timestamp: datetime = Field(default_factory=datetime.now)
 
@@ -59,6 +60,8 @@ class ExchangeRateReport(BaseModel):
             text.append(f"<b>ABCEX:</b>  {buy_str} ₽ | {sell_str} ₽ [BUY-SELL]")
         if self.antarctic_onramp_rate is not None:
             text.append(f"<b>Antarctic:</b>  {self.antarctic_onramp_rate:.2f} ₽ [СБП]")
+        if self.owb_usdc_price is not None:
+            text.append(f"<b>UNISWAP OWB/USDC:</b> {self.owb_usdc_price:.5f} USDC")
         text.append("")
 
         for section in self.sections:
