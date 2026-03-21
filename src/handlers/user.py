@@ -17,7 +17,7 @@ from ..keyboards.menus import (
 from ..services.cbrf import fetch_usd_rub_rate
 from ..services.bestchange import fetch_bestchange_rates
 from ..services.bybit_p2p import fetch_bybit_p2p_rates
-from ..services.abcex import fetch_abcex_last_price
+from ..services.abcex import fetch_abcex_prices
 from ..services.antarctic import fetch_antarctic_sell_rate
 from ..utils.storage import (
     WhitelistStorage, PinnedMessageStorage, UserSettingsStorage, DISPLAY_DEFAULTS,
@@ -195,9 +195,12 @@ async def generate_rates_report(user_id: int | None = None) -> str:
         logger.error(f"Generate report CBRF error: {e}")
         cbrf_rate = 0.0
 
-    abcex_rate: float | None = None
+    abcex_buy: float | None = None
+    abcex_sell: float | None = None
     try:
-        abcex_rate = await fetch_abcex_last_price()
+        prices = await fetch_abcex_prices()
+        if prices:
+            abcex_buy, abcex_sell = prices
     except Exception as e:
         logger.error(f"Generate report ABCEX error: {e}")
 
@@ -247,7 +250,8 @@ async def generate_rates_report(user_id: int | None = None) -> str:
 
     report = ExchangeRateReport(
         cbrf_rate=cbrf_rate,
-        abcex_rate=abcex_rate,
+        abcex_buy=abcex_buy,
+        abcex_sell=abcex_sell,
         antarctic_sell_rate=antarctic_sell,
         sections=sections,
         timestamp=datetime.now(),

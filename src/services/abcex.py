@@ -1,4 +1,4 @@
-"""ABCEX exchange — fetch USDT/RUB last price."""
+"""ABCEX exchange — fetch USDT/RUB buy/sell prices from orderbook."""
 
 import logging
 
@@ -12,20 +12,22 @@ INSTRUMENT = "USDTRUB"
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=2, min=3, max=15))
-async def fetch_abcex_last_price() -> float | None:
-    """Returns the last USDT/RUB price from ABCEX, or None on failure."""
+async def fetch_abcex_prices() -> tuple[float, float] | None:
+    """Returns (buy, sell) prices from ABCEX orderbook, or None on failure."""
     session = AsyncSession(impersonate="chrome110")
     try:
         r = await session.get(
-            f"{BASE_URL}/v2/exchange/public/candle/spot/ticker/day",
+            f"{BASE_URL}/v2/exchange/public/orderbook/depth",
+            params={"instrumentCode": INSTRUMENT},
             timeout=15,
         )
         r.raise_for_status()
         data = r.json()
-        for ticker in data.get("tickers", []):
-            if ticker.get("symbol") == INSTRUMENT:
-                return float(ticker["lastPrice"])
-        logger.warning("ABCEX: USDTRUB ticker not found in response")
-        return None
+        bids = data.get("bid", [])
+        asks = data.get("ask", [])
+        if not bids or not asks:
+            logger.warning("ABCEX: empty orderbook for %s", INSTRUMENT)
+            return None
+        return (float(bids[0]["price"]), float(asks[0]["price"]))
     finally:
         await session.close()
