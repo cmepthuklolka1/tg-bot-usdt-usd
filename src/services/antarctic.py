@@ -143,16 +143,17 @@ class AntarcticTokenManager:
 token_manager = AntarcticTokenManager()
 
 
-async def fetch_antarctic_sell_rate() -> float | None:
-    """Returns the USDT/RUB sell rate from Antarctic Wallet, or None on failure."""
+async def fetch_antarctic_onramp_rate() -> float | None:
+    """Returns the USDT/RUB onramp (SBP buy) rate from Antarctic Wallet, or None on failure."""
     access_token = await token_manager.get_access_token()
     if not access_token:
         return None
 
+    url = "https://app.antarcticwallet.com/api/v3/topup/rub/exchange_rate"
     session = AsyncSession(impersonate="chrome110")
     try:
         r = await session.get(
-            f"{API_BASE}/coins/rates",
+            url,
             headers={
                 "Authorization": f"Bearer {access_token}",
                 "Accept": "application/json",
@@ -169,7 +170,7 @@ async def fetch_antarctic_sell_rate() -> float | None:
             if not new_token:
                 return None
             r = await session.get(
-                f"{API_BASE}/coins/rates",
+                url,
                 headers={
                     "Authorization": f"Bearer {new_token}",
                     "Accept": "application/json",
@@ -182,11 +183,12 @@ async def fetch_antarctic_sell_rate() -> float | None:
         if data.get("status") != "ok":
             logger.warning(f"Antarctic: unexpected status: {data.get('status')}")
             return None
-        for item in data.get("data", {}).get("items", []):
-            if item.get("coin") == "USDT":
-                return float(item["sellRate"])
-        logger.warning("Antarctic: USDT not found in response")
-        return None
+        rate_obj = data.get("data", {}).get("rate")
+        if not rate_obj:
+            logger.warning("Antarctic: no rate in response")
+            return None
+        usdt_per_rub = rate_obj["amount"] / (10 ** rate_obj["scale"])
+        return round(1.0 / usdt_per_rub, 2)
     except Exception as e:
         logger.error(f"Antarctic: fetch error: {e}")
         return None
