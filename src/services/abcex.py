@@ -28,6 +28,7 @@ async def fetch_abcex_prices() -> tuple[float, float] | None:
         if not bids or not asks:
             logger.warning("ABCEX: empty orderbook for %s", INSTRUMENT)
             return None
-        return (float(bids[0]["price"]), float(asks[0]["price"]))
+        # ask = цена покупки (buy), bid = цена продажи (sell)
+        return (float(asks[0]["price"]), float(bids[0]["price"]))
     finally:
         await session.close()
