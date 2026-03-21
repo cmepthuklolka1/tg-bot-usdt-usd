@@ -56,7 +56,7 @@ class ExchangeRateReport(BaseModel):
         if self.abcex_buy is not None or self.abcex_sell is not None:
             buy_str = f"{self.abcex_buy:.2f}" if self.abcex_buy is not None else "—"
             sell_str = f"{self.abcex_sell:.2f}" if self.abcex_sell is not None else "—"
-            text.append(f"<b>ABCEX [BUY | SELL]:</b>  {buy_str} ₽ | {sell_str} ₽")
+            text.append(f"<b>ABCEX:</b>  {buy_str} ₽ | {sell_str} ₽ [BUY-SELL]")
         if self.antarctic_sell_rate is not None:
             text.append(f"<b>Antarctic SELL:</b>  {self.antarctic_sell_rate:.2f} ₽")
         text.append("")
