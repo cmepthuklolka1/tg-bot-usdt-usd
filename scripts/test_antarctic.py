@@ -4,28 +4,37 @@ Run: python scripts/test_antarctic.py
 """
 
 import asyncio
+import json
 from datetime import datetime
+from pathlib import Path
 
 from curl_cffi.requests import AsyncSession
 
-API_URL = "https://app.antarcticwallet.com/api/v2/coins/rates"
-TOKEN = (
-    "eyJhbGciOiJSUzI1NiJ9."
-    "eyJ1c2VyX2lkIjo1NDI4MzMsImp0aSI6ImVjMzU1MzU5MGFhNzA0MTQ5MDlmMTAxNDBmNzI5MGEwIiwiaWF0IjoxNzc0MDMzOTc2LCJleHAiOjE3NzQ0NjU5NzZ9."
-    "WztpMYLrbaBG4DyXc0QOXS3pQf_Jc1QoFbvE3FhFjrfXxlMK6zMY16S_JMEysJTGytIOnt86yq8KDzyB5kg3AUTLq1A0W87oA1-eTeQcf1mGM-itY0BqL5KL7-dCZQ1OliPPkfQm_vpJe84sPc_67wT4rr9ylagMdnxK3QWA-s06Lg_u54PCFZYFiflfqw2w7A1xyuEPqZe4DqGYGLnvtixq9euSULM3_DkVq0uX3lKmShgr2BTfyJ0Ofl0hKRKr7oLfzvwNCx2DwBBojEnCOm4j8TudmlMdtjwCTq1KRgjOb-tX7QvdG-NH5jHEp90wNNZBPolH2T15uI5dTWUjeA"
-)
+RATES_URL = "https://app.antarcticwallet.com/api/v2/coins/rates"
+ONRAMP_URL = "https://app.antarcticwallet.com/api/v3/topup/rub/exchange_rate"
+TOKENS_FILE = Path(__file__).resolve().parent.parent / "config" / "antarctic_tokens.json"
+
+
+def load_token() -> str:
+    with open(TOKENS_FILE) as f:
+        return json.load(f)["access_token"]
+
+
+def _scale_value(obj: dict) -> float:
+    """Convert {amount: 1169434, scale: 8} → 0.01169434"""
+    return obj["amount"] / (10 ** obj["scale"])
 
 
 async def main():
+    token = load_token()
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json",
+    }
+
     async with AsyncSession(impersonate="chrome110") as session:
-        r = await session.get(
-            API_URL,
-            headers={
-                "Authorization": f"Bearer {TOKEN}",
-                "Accept": "application/json",
-            },
-            timeout=15,
-        )
+        # 1. General rates (/v2/coins/rates)
+        r = await session.get(RATES_URL, headers=headers, timeout=15)
         r.raise_for_status()
         data = r.json()
 
@@ -48,11 +57,33 @@ async def main():
             spread = buy - sell
             ttl = item.get("ttl", "?")
 
-            print(f"\n  {coin}/{currency}:")
+            print(f"\n  {coin}/{currency} (general rates):")
             print(f"    Buy rate:   {buy:.2f} {currency}")
             print(f"    Sell rate:  {sell:.2f} {currency}")
             print(f"    Spread:     {spread:.2f} {currency} ({spread / sell * 100:.1f}%)")
             print(f"    TTL:        {ttl} min")
+
+        # 2. Onramp SBP rate (/v3/topup/rub/exchange_rate)
+        print("\n" + "=" * 50)
+        print("  Onramp SBP rate (topup/rub/exchange_rate)")
+        print("=" * 50)
+
+        r2 = await session.get(ONRAMP_URL, headers=headers, timeout=15)
+        r2.raise_for_status()
+        data2 = r2.json()
+
+        if data2.get("status") != "ok":
+            print(f"  API error: {data2}")
+        else:
+            rate_obj = data2["data"]["rate"]
+            rate_usdt_per_rub = _scale_value(rate_obj)
+            rub_per_usdt = 1.0 / rate_usdt_per_rub
+            ttl = data2["data"].get("ttl", "?")
+
+            print(f"\n  Raw rate:       {rate_obj}")
+            print(f"  USDT per 1 RUB: {rate_usdt_per_rub:.8f}")
+            print(f"  RUB per 1 USDT: {rub_per_usdt:.2f} RUB  <-- onramp buy price")
+            print(f"  TTL:            {ttl} sec")
 
         print("\n" + "=" * 50)
 

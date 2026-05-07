@@ -33,6 +33,8 @@
 
 ## 🚀 Установка
 
+Приложение устанавливается в `/opt/usdt-bot` — стандартный каталог для стороннего ПО на Linux.
+
 ### 1. Клонируйте репозиторий
 
 ```bash
@@ -48,15 +50,18 @@ chmod +x install.sh
 ```
 
 Скрипт автоматически:
+- скопирует файлы в `/opt/usdt-bot` и настроит права доступа
 - создаст виртуальное окружение и установит зависимости
 - скопирует шаблоны конфигурационных файлов
 - создаст файл службы systemd (`/etc/systemd/system/usdt-bot.service`)
 - выведет команды для добавления в автозапуск
 
+> Если клонировать сразу в целевой каталог (`git clone <url> /opt/usdt-bot`), шаг копирования пропускается автоматически.
+
 ### 3. Заполните `.env`
 
 ```bash
-nano .env
+nano /opt/usdt-bot/.env
 ```
 
 ```env
@@ -152,7 +157,7 @@ nssm remove USDTBot confirm
 ## 🔄 Обновление проекта
 
 ```bash
-bash deploy.sh
+bash /opt/usdt-bot/deploy.sh
 ```
 
 <details>
@@ -228,39 +233,43 @@ nano config/antarctic_tokens.json
 ## 📁 Структура проекта
 
 ```
-tg-bot-usdt-usd/
-├── main.py                     # Точка входа + фоновое автообновление
-├── install.sh                  # Скрипт установки для Linux
-├── deploy.sh                   # Скрипт обновления (git pull + restart)
+tg-bot-usdt-usd/          (исходный репозиторий)
+/opt/usdt-bot/            (установочный каталог на сервере)
+├── main.py               # Точка входа + фоновое автообновление
+├── install.sh            # Скрипт установки (копирует в /opt/usdt-bot)
+├── deploy.sh             # Скрипт обновления (git pull + restart)
 ├── requirements.txt
-├── .env.example                # Шаблон переменных окружения
+├── .env.example          # Шаблон переменных окружения
 ├── config/
-│   ├── whitelist.example.json  # Шаблон вайтлиста
+│   ├── whitelist.example.json
 │   ├── banned_sellers.example.json
 │   ├── pinned_messages.example.json
-│   └── antarctic_tokens.json   # Токены Antarctic Wallet (создаётся вручную)
+│   └── antarctic_tokens.json  # Токены Antarctic Wallet (создаётся вручную)
 ├── scripts/
-│   ├── test_abcex.py           # Тест парсинга ABCEX
-│   ├── test_antarctic.py       # Тест парсинга Antarctic Wallet
-│   └── test_antarctic_refresh.py # Тест обновления токенов
+│   ├── test_abcex.py
+│   ├── test_antarctic.py
+│   ├── test_antarctic_refresh.py
+│   └── test_uniswap_owb.py
 └── src/
-    ├── config.py               # Настройки приложения
+    ├── config.py
     ├── domain/
-    │   └── models.py           # Pydantic-модели данных
+    │   └── models.py
     ├── handlers/
-    │   ├── user.py             # Команды пользователя, генерация отчёта
-    │   └── admin.py            # Команды администратора (FSM)
+    │   ├── user.py
+    │   └── admin.py
     ├── keyboards/
-    │   └── menus.py            # Inline-клавиатуры
+    │   └── menus.py
     ├── services/
-    │   ├── cbrf.py             # Парсинг ЦБ РФ (XML)
-    │   ├── abcex.py            # ABCEX API (lastPrice USDT/RUB)
-    │   ├── antarctic.py        # Antarctic Wallet API + auto-refresh токенов
-    │   ├── bestchange.py       # Парсинг BestChange (HTML)
-    │   └── bybit_p2p.py        # Bybit P2P API (JSON)
+    │   ├── cbrf.py
+    │   ├── abcex.py
+    │   ├── antarctic.py
+    │   ├── bestchange.py
+    │   ├── bybit_p2p.py
+    │   └── uniswap.py
     └── utils/
-        ├── storage.py          # JSON-хранилище (вайтлист, бан-лист, настройки)
-        └── commands.py         # Регистрация команд бота
+        ├── storage.py
+        ├── retry.py      # Общие retry-декораторы для сервисов
+        └── commands.py
 ```
 
 ---

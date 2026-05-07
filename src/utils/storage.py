@@ -89,7 +89,6 @@ class BannedSellersStorage:
         if user_to_remove:
             banned.remove(user_to_remove)
             data["banned"] = banned
-            data["banned"] = banned
             self._write_data(data)
             return True
         return False

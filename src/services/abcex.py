@@ -3,7 +3,8 @@
 import logging
 
 from curl_cffi.requests import AsyncSession
-from tenacity import retry, stop_after_attempt, wait_exponential
+
+from ..utils.retry import DEFAULT_RETRY
 
 logger = logging.getLogger(__name__)
 
@@ -11,11 +12,10 @@ BASE_URL = "https://hub.abcex.io/api"
 INSTRUMENT = "USDTRUB"
 
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=2, min=3, max=15))
+@DEFAULT_RETRY
 async def fetch_abcex_prices() -> tuple[float, float] | None:
     """Returns (buy, sell) prices from ABCEX orderbook, or None on failure."""
-    session = AsyncSession(impersonate="chrome110")
-    try:
+    async with AsyncSession(impersonate="chrome110") as session:
         r = await session.get(
             f"{BASE_URL}/v2/exchange/public/orderbook/depth",
             params={"instrumentCode": INSTRUMENT},
@@ -30,5 +30,3 @@ async def fetch_abcex_prices() -> tuple[float, float] | None:
             return None
         # ask = цена покупки (buy), bid = цена продажи (sell)
         return (float(asks[0]["price"]), float(bids[0]["price"]))
-    finally:
-        await session.close()

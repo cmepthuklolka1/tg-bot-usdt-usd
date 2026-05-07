@@ -1,8 +1,8 @@
 import logging
 from curl_cffi.requests import AsyncSession
-from tenacity import retry, stop_after_attempt, wait_exponential
 
 from ..domain.models import BybitP2PResponse, P2PItem
+from ..utils.retry import DEFAULT_RETRY
 
 logger = logging.getLogger(__name__)
 
@@ -46,11 +46,10 @@ PAYLOAD = {
 }
 
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=2, min=3, max=15))
+@DEFAULT_RETRY
 async def fetch_bybit_p2p_rates(min_amount: float = 100_000.0) -> list[P2PItem]:
     """Fetches and filters P2P USDT/RUB rates from Bybit's internal JSON API."""
-    session = AsyncSession(impersonate="chrome110")
-    try:
+    async with AsyncSession(impersonate="chrome110") as session:
         response = await session.post(URL, headers=HEADERS, json=PAYLOAD, timeout=15)
         response.raise_for_status()
 
@@ -83,9 +82,3 @@ async def fetch_bybit_p2p_rates(min_amount: float = 100_000.0) -> list[P2PItem]:
             f"{min_amount:.0f} RUB + payment whitelist + ban filter"
         )
         return filtered
-
-    except Exception as e:
-        logger.error(f"Failed to fetch Bybit P2P rates: {e}")
-        raise
-    finally:
-        await session.close()

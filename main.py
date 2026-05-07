@@ -21,9 +21,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-logger = logging.getLogger(__name__)
-
-
 async def auto_update_task(bot: Bot):
     while True:
         await asyncio.sleep(3600)  # Ждём 1 час

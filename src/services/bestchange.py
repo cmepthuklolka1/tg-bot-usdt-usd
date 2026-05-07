@@ -1,9 +1,9 @@
 import logging
 from bs4 import BeautifulSoup
 from curl_cffi.requests import AsyncSession
-from tenacity import retry, stop_after_attempt, wait_exponential
 
 from ..domain.models import ExchangerOffer, BestChangeRates
+from ..utils.retry import DEFAULT_RETRY
 
 logger = logging.getLogger(__name__)
 
@@ -25,15 +25,14 @@ def clean_float(text: str) -> float:
     clean = clean.replace(',', '.')
     return float(clean)
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=2, min=3, max=15))
+@DEFAULT_RETRY
 async def fetch_bestchange_rates(
     payment: str = "sberbank",
     coin: str = "tether-bep20",
 ) -> BestChangeRates:
     """Scrapes exchange table from BestChange for given payment method and coin."""
     url = BASE_URL.format(payment=payment, coin=coin)
-    session = AsyncSession(impersonate="chrome110")
-    try:
+    async with AsyncSession(impersonate="chrome110") as session:
         response = await session.get(url, headers=HEADERS, timeout=15)
         response.raise_for_status()
 
@@ -119,9 +118,3 @@ async def fetch_bestchange_rates(
 
         logger.info(f"BestChange ({payment} → {coin}): {len(valid_offers)} unique offers parsed")
         return BestChangeRates(offers=valid_offers)
-
-    except Exception as e:
-        logger.error(f"Failed to fetch BestChange rates: {e}")
-        raise
-    finally:
-        await session.close()
