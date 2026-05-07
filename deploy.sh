@@ -1,8 +1,8 @@
 #!/bin/bash
 set -e
 
-INSTALL_DIR="/opt/usdt-bot"
-SERVICE_NAME="usdt-bot"
+INSTALL_DIR="/opt/crypto-exkurs-bot"
+SERVICE_NAME="crypto-exkurs-bot"
 
 echo "=== Обновление USDT Rate Monitor Bot ==="
 echo "  Каталог: $INSTALL_DIR"

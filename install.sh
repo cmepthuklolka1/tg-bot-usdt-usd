@@ -1,8 +1,8 @@
 #!/bin/bash
 set -e
 
-INSTALL_DIR="/opt/usdt-bot"
-SERVICE_NAME="usdt-bot"
+INSTALL_DIR="/opt/crypto-exkurs-bot"
+SERVICE_NAME="crypto-exkurs-bot"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 CURRENT_USER="$(whoami)"
 SOURCE_DIR="$(cd "$(dirname "$0")" && pwd)"

@@ -33,7 +33,7 @@
 
 ## 🚀 Установка
 
-Приложение устанавливается в `/opt/usdt-bot` — стандартный каталог для стороннего ПО на Linux.
+Приложение устанавливается в `/opt/crypto-exkurs-bot` — стандартный каталог для стороннего ПО на Linux.
 
 ### 1. Клонируйте репозиторий
 
@@ -50,18 +50,18 @@ chmod +x install.sh
 ```
 
 Скрипт автоматически:
-- скопирует файлы в `/opt/usdt-bot` и настроит права доступа
+- скопирует файлы в `/opt/crypto-exkurs-bot` и настроит права доступа
 - создаст виртуальное окружение и установит зависимости
 - скопирует шаблоны конфигурационных файлов
-- создаст файл службы systemd (`/etc/systemd/system/usdt-bot.service`)
+- создаст файл службы systemd (`/etc/systemd/system/crypto-exkurs-bot.service`)
 - выведет команды для добавления в автозапуск
 
-> Если клонировать сразу в целевой каталог (`git clone <url> /opt/usdt-bot`), шаг копирования пропускается автоматически.
+> Если клонировать сразу в целевой каталог (`git clone <url> /opt/crypto-exkurs-bot`), шаг копирования пропускается автоматически.
 
 ### 3. Заполните `.env`
 
 ```bash
-nano /opt/usdt-bot/.env
+nano /opt/crypto-exkurs-bot/.env
 ```
 
 ```env
@@ -115,18 +115,18 @@ python main.py
 
 ```bash
 # Добавить в автозапуск и запустить
-sudo systemctl enable usdt-bot
-sudo systemctl start usdt-bot
+sudo systemctl enable crypto-exkurs-bot
+sudo systemctl start crypto-exkurs-bot
 
 # Статус
-sudo systemctl status usdt-bot
+sudo systemctl status crypto-exkurs-bot
 
 # Остановить / перезапустить
-sudo systemctl stop usdt-bot
-sudo systemctl restart usdt-bot
+sudo systemctl stop crypto-exkurs-bot
+sudo systemctl restart crypto-exkurs-bot
 
 # Логи в реальном времени
-sudo journalctl -u usdt-bot -f
+sudo journalctl -u crypto-exkurs-bot -f
 ```
 
 <details>
@@ -157,7 +157,7 @@ nssm remove USDTBot confirm
 ## 🔄 Обновление проекта
 
 ```bash
-bash /opt/usdt-bot/deploy.sh
+bash /opt/crypto-exkurs-bot/deploy.sh
 ```
 
 <details>
@@ -234,9 +234,9 @@ nano config/antarctic_tokens.json
 
 ```
 tg-bot-usdt-usd/          (исходный репозиторий)
-/opt/usdt-bot/            (установочный каталог на сервере)
+/opt/crypto-exkurs-bot/            (установочный каталог на сервере)
 ├── main.py               # Точка входа + фоновое автообновление
-├── install.sh            # Скрипт установки (копирует в /opt/usdt-bot)
+├── install.sh            # Скрипт установки (копирует в /opt/crypto-exkurs-bot)
 ├── deploy.sh             # Скрипт обновления (git pull + restart)
 ├── requirements.txt
 ├── .env.example          # Шаблон переменных окружения
