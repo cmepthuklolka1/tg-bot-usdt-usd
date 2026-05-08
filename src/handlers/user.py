@@ -29,6 +29,15 @@ logger = logging.getLogger(__name__)
 storage = WhitelistStorage()
 settings_storage = UserSettingsStorage()
 
+
+@router.message(F.pinned_message)
+async def delete_pin_notification(message: Message):
+    """Удаляет служебное сообщение 'закрепил сообщение'."""
+    try:
+        await message.delete()
+    except Exception:
+        pass
+
 EXCHANGE_LABELS = {
     "bestchange_1": "BestChange-1",
     "bestchange_2": "BestChange-2",
