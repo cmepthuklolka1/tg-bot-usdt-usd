@@ -127,8 +127,12 @@ class AntarcticTokenManager:
             if self._needs_refresh():
                 success = await self._do_refresh()
                 if not success:
-                    await self._notify_admin()
-                    return None
+                    if time.time() >= self._expires_at:
+                        # Токен реально истёк — без него не обойтись
+                        await self._notify_admin()
+                        return None
+                    # Рефреш не удался, но токен ещё жив — используем его
+                    logger.warning("Antarctic: refresh failed, using current token until expiry")
 
             return self._access_token
 

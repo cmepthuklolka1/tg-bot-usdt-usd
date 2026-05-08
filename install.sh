@@ -15,7 +15,14 @@ echo
 echo "[1/5] Подготовка каталога приложения..."
 if [ "$SOURCE_DIR" != "$INSTALL_DIR" ]; then
     sudo mkdir -p "$INSTALL_DIR"
-    sudo rsync -a --exclude='venv/' --exclude='__pycache__/' \
+    sudo rsync -a \
+        --exclude='venv/' \
+        --exclude='__pycache__/' \
+        --exclude='config/antarctic_tokens.json' \
+        --exclude='config/whitelist.json' \
+        --exclude='config/banned_sellers.json' \
+        --exclude='config/pinned_messages.json' \
+        --exclude='config/user_settings.json' \
         "$SOURCE_DIR/" "$INSTALL_DIR/"
     sudo chown -R "$CURRENT_USER:$CURRENT_USER" "$INSTALL_DIR"
     echo "  → Файлы скопированы в $INSTALL_DIR"
