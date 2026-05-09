@@ -1,6 +1,7 @@
 import logging
 from datetime import datetime
 from aiogram import Router, F
+from aiogram.enums import ContentType
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -30,13 +31,15 @@ storage = WhitelistStorage()
 settings_storage = UserSettingsStorage()
 
 
-@router.message(F.pinned_message)
+@router.message(F.content_type == ContentType.PINNED_MESSAGE)
 async def delete_pin_notification(message: Message):
     """Удаляет служебное сообщение 'закрепил сообщение'."""
+    logger.info("Pin notification received: chat=%s msg_id=%s", message.chat.id, message.message_id)
     try:
         await message.delete()
-    except Exception:
-        pass
+        logger.info("Pin notification deleted: msg_id=%s", message.message_id)
+    except Exception as e:
+        logger.warning("Failed to delete pin notification msg_id=%s: %s", message.message_id, e)
 
 EXCHANGE_LABELS = {
     "bestchange_1": "BestChange-1",
