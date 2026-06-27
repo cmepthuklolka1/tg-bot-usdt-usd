@@ -14,7 +14,8 @@ logger = logging.getLogger(__name__)
 
 API_BASE = "https://app.antarcticwallet.com/api/v2"
 GENERAL_RATES_URL = f"{API_BASE}/coins/rates"
-TOPUP_RATE_URL = "https://app.antarcticwallet.com/api/v3/topup/rub/exchange_rate"
+CASH_ONRAMP_RATE_URL = "https://app.antarcticwallet.com/api/v3/buy/crypto/cash/exchange_rate/aw"
+ANTARCTIC_SBP_RATE_URL = "https://app.antarcticwallet.com/api/v3/buy/crypto/exchange_rate/aw"
 REFRESH_BEFORE_SEC = 86400  # refresh 24h before expiry
 
 
@@ -197,6 +198,34 @@ def _response_text(response, limit: int = 500) -> str:
     return text[:limit]
 
 
+def _parse_rub_per_usdt_rate(data: dict) -> float | None:
+    """Parse current AW onramp rate payload into RUB per 1 USDT."""
+    rate_obj = data.get("data", {}).get("rate")
+    if not rate_obj:
+        return None
+
+    if isinstance(rate_obj, dict):
+        try:
+            usdt_per_rub = rate_obj["amount"] / (10 ** rate_obj["scale"])
+        except (KeyError, TypeError, ValueError, ZeroDivisionError):
+            return None
+        if usdt_per_rub <= 0:
+            return None
+        return round(1.0 / usdt_per_rub, 2)
+
+    try:
+        rate = float(str(rate_obj).replace(",", "."))
+    except (TypeError, ValueError):
+        return None
+    if rate <= 0:
+        return None
+
+    # The current web app normalizes rates below 1 by inverting them.
+    if rate < 1:
+        rate = 1.0 / rate
+    return round(rate, 2)
+
+
 async def _fetch_general_usdt_buy_rate(session: AsyncSession, access_token: str) -> float | None:
     r = await session.get(
         GENERAL_RATES_URL,
@@ -232,83 +261,116 @@ async def _fetch_general_usdt_buy_rate(session: AsyncSession, access_token: str)
 
 
 async def fetch_antarctic_onramp_rate() -> float | None:
-    """Returns the USDT/RUB onramp (SBP buy) rate from Antarctic Wallet, or None on failure."""
+    """Returns the USDT/RUB onramp buy rate from Antarctic Wallet, or None on failure."""
     access_token = await token_manager.get_access_token()
     if not access_token:
         return None
 
     session = AsyncSession(impersonate="chrome110")
     try:
-        r = await session.get(
-            TOPUP_RATE_URL,
-            headers={
-                "Authorization": f"Bearer {access_token}",
-                "Accept": "application/json",
-            },
-            timeout=15,
-        )
-
-        # Token expired mid-flight — try refresh once
-        if r.status_code == 401:
-            logger.warning("Antarctic: got 401, attempting refresh")
-            if not await token_manager.force_refresh():
-                return None
-            new_token = await token_manager.get_access_token()
-            if not new_token:
-                return None
-            r = await session.get(
-                TOPUP_RATE_URL,
+        async def get_rate_response(url: str):
+            nonlocal access_token
+            response = await session.get(
+                url,
                 headers={
-                    "Authorization": f"Bearer {new_token}",
+                    "Authorization": f"Bearer {access_token}",
                     "Accept": "application/json",
                 },
                 timeout=15,
             )
-            access_token = new_token
+            if response.status_code != 401:
+                return response
 
-        if r.status_code >= 400:
-            body = _response_text(r)
+            logger.warning("Antarctic: got 401 from %s, attempting refresh", url)
+            if not await token_manager.force_refresh():
+                return response
+            new_token = await token_manager.get_access_token()
+            if not new_token:
+                return response
+            access_token = new_token
+            return await session.get(
+                url,
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Accept": "application/json",
+                },
+                timeout=15,
+            )
+
+        failures: list[str] = []
+        endpoints = [
+            ("cash onramp", CASH_ONRAMP_RATE_URL),
+            ("Antarctic SBP", ANTARCTIC_SBP_RATE_URL),
+        ]
+
+        for index, (label, url) in enumerate(endpoints):
+            r = await get_rate_response(url)
+            if r.status_code >= 400:
+                body = _response_text(r)
+                failures.append(f"{label}: HTTP {r.status_code}, body: {body or '<empty>'}")
+                logger.error(
+                    "Antarctic: %s rate failed, status %s, body: %s",
+                    label,
+                    r.status_code,
+                    body,
+                )
+                continue
+
+            r.raise_for_status()
+            data = r.json()
+            if data.get("status") != "ok":
+                failures.append(f"{label}: unexpected status {data.get('status')}")
+                logger.warning("Antarctic: %s unexpected status: %s", label, data.get("status"))
+                continue
+
+            rate = _parse_rub_per_usdt_rate(data)
+            if rate is None:
+                failures.append(f"{label}: response has no valid data.rate")
+                logger.warning("Antarctic: %s response has no valid data.rate", label)
+                continue
+
+            if index > 0:
+                await token_manager._notify_admin(
+                    "onramp_secondary_fallback",
+                    "Основной cash onramp endpoint Antarctic недоступен. "
+                    f"Использую резервный Antarctic SBP endpoint. "
+                    f"Проблема: {'; '.join(failures)}",
+                    title="⚠️ Antarctic Wallet: основной onramp-курс недоступен.",
+                    action=(
+                        "Действий с токенами сейчас не требуется: access token принят, "
+                        "резервный Antarctic SBP-курс получен. Если нужен именно курс "
+                        "«Счёт по реквизитам», проверьте его доступность в веб-кабинете."
+                    ),
+                )
+            return rate
+
+        if failures:
             logger.error(
-                "Antarctic: topup rate failed, status %s, body: %s",
-                r.status_code,
-                body,
+                "Antarctic: onramp rate endpoints failed: %s",
+                "; ".join(failures),
             )
             fallback_rate = await _fetch_general_usdt_buy_rate(session, access_token)
             if fallback_rate is not None:
                 await token_manager._notify_admin(
                     "onramp_fallback",
-                    "SBP endpoint Antarctic вернул "
-                    f"HTTP {r.status_code}. Использую резервный общий buyRate USDT/RUB. "
-                    f"Ответ SBP endpoint: {body or '<empty>'}",
-                    title="⚠️ Antarctic Wallet: основной SBP-курс недоступен.",
+                    "Onramp endpoints Antarctic недоступны. "
+                    f"Использую резервный общий buyRate USDT/RUB. "
+                    f"Проблемы onramp endpoints: {'; '.join(failures)}",
+                    title="⚠️ Antarctic Wallet: основной onramp-курс недоступен.",
                     action=(
                         "Действий с токенами сейчас не требуется: access token принят, "
-                        "резервный общий курс получен. Если нужен именно SBP/topup-курс, "
-                        "проверьте в веб-кабинете Antarctic доступность пополнения через RUB/СБП."
+                        "резервный общий курс получен. Если нужен именно курс со страницы "
+                        "/onramp, проверьте в веб-кабинете Antarctic доступность пополнения RUB."
                     ),
                 )
                 return fallback_rate
-            r.raise_for_status()
 
-        r.raise_for_status()
-        data = r.json()
-        if data.get("status") != "ok":
-            logger.warning(f"Antarctic: unexpected status: {data.get('status')}")
-            await token_manager._notify_admin(
-                "rate_status_not_ok",
-                f"API курса вернул неожиданный статус: {data.get('status')}.",
-            )
-            return None
-        rate_obj = data.get("data", {}).get("rate")
-        if not rate_obj:
-            logger.warning("Antarctic: no rate in response")
-            await token_manager._notify_admin(
-                "rate_missing",
-                "API курса не вернул поле data.rate.",
-            )
-            return None
-        usdt_per_rub = rate_obj["amount"] / (10 ** rate_obj["scale"])
-        return round(1.0 / usdt_per_rub, 2)
+        await token_manager._notify_admin(
+            "rate_missing",
+            "API курса не вернул валидный onramp rate. "
+            f"Проблемы endpoints: {'; '.join(failures) or '<нет деталей>'}.",
+        )
+        return None
     except Exception as e:
         logger.error(f"Antarctic: fetch error: {e}")
         await token_manager._notify_admin(

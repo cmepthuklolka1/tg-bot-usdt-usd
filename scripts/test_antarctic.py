@@ -11,7 +11,8 @@ from pathlib import Path
 from curl_cffi.requests import AsyncSession
 
 RATES_URL = "https://app.antarcticwallet.com/api/v2/coins/rates"
-ONRAMP_URL = "https://app.antarcticwallet.com/api/v3/topup/rub/exchange_rate"
+CASH_ONRAMP_URL = "https://app.antarcticwallet.com/api/v3/buy/crypto/cash/exchange_rate/aw"
+ANTARCTIC_SBP_URL = "https://app.antarcticwallet.com/api/v3/buy/crypto/exchange_rate/aw"
 TOKENS_FILE = Path(__file__).resolve().parent.parent / "config" / "antarctic_tokens.json"
 
 
@@ -23,6 +24,11 @@ def load_token() -> str:
 def _scale_value(obj: dict) -> float:
     """Convert {amount: 1169434, scale: 8} → 0.01169434"""
     return obj["amount"] / (10 ** obj["scale"])
+
+
+def _normalize_rate(rate) -> float:
+    value = float(str(rate).replace(",", "."))
+    return 1.0 / value if value < 1 else value
 
 
 async def main():
@@ -63,27 +69,33 @@ async def main():
             print(f"    Spread:     {spread:.2f} {currency} ({spread / sell * 100:.1f}%)")
             print(f"    TTL:        {ttl} min")
 
-        # 2. Onramp SBP rate (/v3/topup/rub/exchange_rate)
-        print("\n" + "=" * 50)
-        print("  Onramp SBP rate (topup/rub/exchange_rate)")
-        print("=" * 50)
+        # 2. Onramp rates used by the current web app
+        for title, url in (
+            ("Cash/account onramp rate", CASH_ONRAMP_URL),
+            ("Antarctic SBP provider rate", ANTARCTIC_SBP_URL),
+        ):
+            print("\n" + "=" * 50)
+            print(f"  {title}")
+            print("=" * 50)
 
-        r2 = await session.get(ONRAMP_URL, headers=headers, timeout=15)
-        r2.raise_for_status()
-        data2 = r2.json()
+            r2 = await session.get(url, headers=headers, timeout=15)
+            r2.raise_for_status()
+            data2 = r2.json()
 
-        if data2.get("status") != "ok":
-            print(f"  API error: {data2}")
-        else:
-            rate_obj = data2["data"]["rate"]
-            rate_usdt_per_rub = _scale_value(rate_obj)
-            rub_per_usdt = 1.0 / rate_usdt_per_rub
-            ttl = data2["data"].get("ttl", "?")
+            if data2.get("status") != "ok":
+                print(f"  API error: {data2}")
+            else:
+                rate_obj = data2["data"]["rate"]
+                if isinstance(rate_obj, dict):
+                    rub_per_usdt = 1.0 / _scale_value(rate_obj)
+                else:
+                    rub_per_usdt = _normalize_rate(rate_obj)
+                ttl = data2["data"].get("ttl", "?")
 
-            print(f"\n  Raw rate:       {rate_obj}")
-            print(f"  USDT per 1 RUB: {rate_usdt_per_rub:.8f}")
-            print(f"  RUB per 1 USDT: {rub_per_usdt:.2f} RUB  <-- onramp buy price")
-            print(f"  TTL:            {ttl} sec")
+                print(f"\n  Endpoint:       {url}")
+                print(f"  Raw rate:       {rate_obj}")
+                print(f"  RUB per 1 USDT: {rub_per_usdt:.2f} RUB  <-- web app onramp price")
+                print(f"  TTL:            {ttl} sec")
 
         print("\n" + "=" * 50)
 

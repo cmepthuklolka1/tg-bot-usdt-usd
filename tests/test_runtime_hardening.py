@@ -17,6 +17,8 @@ from src.domain.models import ExchangerOffer, P2PItem  # noqa: E402
 from src.handlers.user import _format_bc_line, _format_bybit_line  # noqa: E402
 from src.services.antarctic import (  # noqa: E402
     AntarcticTokenManager,
+    CASH_ONRAMP_RATE_URL,
+    ANTARCTIC_SBP_RATE_URL,
     _build_admin_message,
     fetch_antarctic_onramp_rate,
 )
@@ -144,7 +146,48 @@ class AntarcticNotificationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(bot.messages[0][0], 123)
         self.assertIn("Antarctic Wallet", bot.messages[0][1])
 
-    async def test_topup_422_falls_back_to_general_buy_rate_and_notifies_admin(self):
+    async def test_cash_onramp_rate_string_is_parsed_like_web_app(self):
+        class FakeTokenManager:
+            async def get_access_token(self):
+                return "access-token"
+
+            async def force_refresh(self):
+                return False
+
+            async def _notify_admin(self, key, reason, **kwargs):
+                raise AssertionError("Admin should not be notified on successful rate fetch")
+
+        class FakeResponse:
+            status_code = 200
+            text = '{"status":"ok"}'
+
+            def json(self):
+                return {
+                    "status": "ok",
+                    "data": {"rate": "82.36", "ttl": 10, "lastUpdateAt": 1},
+                }
+
+            def raise_for_status(self):
+                pass
+
+        class FakeSession:
+            def __init__(self, *args, **kwargs):
+                self.urls = []
+
+            async def get(self, url, headers=None, timeout=None):
+                self.urls.append(url)
+                return FakeResponse()
+
+            async def close(self):
+                pass
+
+        with patch.object(antarctic_module, "token_manager", FakeTokenManager()), \
+             patch.object(antarctic_module, "AsyncSession", FakeSession):
+            rate = await fetch_antarctic_onramp_rate()
+
+        self.assertEqual(rate, 82.36)
+
+    async def test_cash_onramp_422_tries_antarctic_sbp_rate_before_general_fallback(self):
         class FakeTokenManager:
             def __init__(self):
                 self.messages = []
@@ -177,7 +220,64 @@ class AntarcticNotificationTests(unittest.IsolatedAsyncioTestCase):
 
             async def get(self, url, headers=None, timeout=None):
                 self.urls.append(url)
-                if "topup/rub/exchange_rate" in url:
+                if url == CASH_ONRAMP_RATE_URL:
+                    return FakeResponse(422, {"status": "error"}, '{"error":"unprocessable"}')
+                if url == ANTARCTIC_SBP_RATE_URL:
+                    return FakeResponse(
+                        200,
+                        {"status": "ok", "data": {"rate": "82.44", "ttl": 10}},
+                    )
+                raise AssertionError(f"Unexpected URL: {url}")
+
+            async def close(self):
+                pass
+
+        fake_manager = FakeTokenManager()
+        with patch.object(antarctic_module, "token_manager", fake_manager), \
+             patch.object(antarctic_module, "AsyncSession", FakeSession):
+            rate = await fetch_antarctic_onramp_rate()
+
+        self.assertEqual(rate, 82.44)
+        key, reason, kwargs = fake_manager.messages[0]
+        self.assertEqual(key, "onramp_secondary_fallback")
+        self.assertIn("422", reason)
+        self.assertIn("резервный Antarctic SBP endpoint", reason)
+        self.assertIn("onramp-курс", kwargs["title"])
+
+    async def test_onramp_api_failures_fall_back_to_general_buy_rate_and_notify_admin(self):
+        class FakeTokenManager:
+            def __init__(self):
+                self.messages = []
+
+            async def get_access_token(self):
+                return "access-token"
+
+            async def force_refresh(self):
+                return False
+
+            async def _notify_admin(self, key, reason, **kwargs):
+                self.messages.append((key, reason, kwargs))
+
+        class FakeResponse:
+            def __init__(self, status_code, data, text=""):
+                self.status_code = status_code
+                self._data = data
+                self.text = text
+
+            def json(self):
+                return self._data
+
+            def raise_for_status(self):
+                if self.status_code >= 400:
+                    raise RuntimeError(f"HTTP Error {self.status_code}: {self.text}")
+
+        class FakeSession:
+            def __init__(self, *args, **kwargs):
+                self.urls = []
+
+            async def get(self, url, headers=None, timeout=None):
+                self.urls.append(url)
+                if url in (CASH_ONRAMP_RATE_URL, ANTARCTIC_SBP_RATE_URL):
                     return FakeResponse(422, {"status": "error"}, '{"error":"unprocessable"}')
                 if "coins/rates" in url:
                     return FakeResponse(
@@ -206,7 +306,7 @@ class AntarcticNotificationTests(unittest.IsolatedAsyncioTestCase):
         key, reason, kwargs = fake_manager.messages[0]
         self.assertEqual(key, "onramp_fallback")
         self.assertIn("422", reason)
-        self.assertIn("основной SBP-курс", kwargs["title"])
+        self.assertIn("основной onramp-курс", kwargs["title"])
         self.assertIn("Действий с токенами сейчас не требуется", kwargs["action"])
 
 

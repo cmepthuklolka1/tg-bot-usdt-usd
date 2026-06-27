@@ -59,7 +59,7 @@ class ExchangeRateReport(BaseModel):
             sell_str = f"{self.abcex_sell:.2f}" if self.abcex_sell is not None else "—"
             text.append(f"<b>ABCEX:</b>  {buy_str} ₽ | {sell_str} ₽")
         if self.antarctic_onramp_rate is not None:
-            text.append(f"<b>Antarctic:</b>  {self.antarctic_onramp_rate:.2f} ₽ [СБП]")
+            text.append(f"<b>Antarctic:</b>  {self.antarctic_onramp_rate:.2f} ₽ [пополнение]")
         if self.owb_usdc_price is not None:
             text.append(f"<b>UNISWAP OWB/USDC:</b> {self.owb_usdc_price:.5f} USDC")
         text.append("")
