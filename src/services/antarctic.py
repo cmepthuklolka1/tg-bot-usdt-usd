@@ -18,6 +18,18 @@ TOPUP_RATE_URL = "https://app.antarcticwallet.com/api/v3/topup/rub/exchange_rate
 REFRESH_BEFORE_SEC = 86400  # refresh 24h before expiry
 
 
+def _build_admin_message(
+    reason: str,
+    *,
+    title: str = "⚠️ Antarctic Wallet: курс временно недоступен.",
+    action: str = (
+        "Что сделать: заново войдите в Antarctic Wallet и обновите "
+        "config/antarctic_tokens.json на сервере."
+    ),
+) -> str:
+    return f"{title}\n\nПричина: {reason}\n\n{action}"
+
+
 class AntarcticTokenManager:
     def __init__(self):
         self._access_token: str = ""
@@ -115,16 +127,23 @@ class AntarcticTokenManager:
         finally:
             await session.close()
 
-    async def _notify_admin(self, key: str, reason: str):
+    async def _notify_admin(
+        self,
+        key: str,
+        reason: str,
+        *,
+        title: str = "⚠️ Antarctic Wallet: курс временно недоступен.",
+        action: str = (
+            "Что сделать: заново войдите в Antarctic Wallet и обновите "
+            "config/antarctic_tokens.json на сервере."
+        ),
+    ):
         if self._last_notification_key == key or not self._bot:
             return
         try:
             await self._bot.send_message(
                 config.admin_id,
-                "⚠️ Antarctic Wallet: курс временно недоступен.\n\n"
-                f"Причина: {reason}\n\n"
-                "Что сделать: заново войдите в Antarctic Wallet и обновите "
-                "config/antarctic_tokens.json на сервере.",
+                _build_admin_message(reason, title=title, action=action),
             )
             self._last_notification_key = key
         except Exception as e:
@@ -261,6 +280,12 @@ async def fetch_antarctic_onramp_rate() -> float | None:
                     "SBP endpoint Antarctic вернул "
                     f"HTTP {r.status_code}. Использую резервный общий buyRate USDT/RUB. "
                     f"Ответ SBP endpoint: {body or '<empty>'}",
+                    title="⚠️ Antarctic Wallet: основной SBP-курс недоступен.",
+                    action=(
+                        "Действий с токенами сейчас не требуется: access token принят, "
+                        "резервный общий курс получен. Если нужен именно SBP/topup-курс, "
+                        "проверьте в веб-кабинете Antarctic доступность пополнения через RUB/СБП."
+                    ),
                 )
                 return fallback_rate
             r.raise_for_status()

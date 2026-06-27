@@ -15,7 +15,11 @@ import main  # noqa: E402
 import src.services.antarctic as antarctic_module  # noqa: E402
 from src.domain.models import ExchangerOffer, P2PItem  # noqa: E402
 from src.handlers.user import _format_bc_line, _format_bybit_line  # noqa: E402
-from src.services.antarctic import AntarcticTokenManager, fetch_antarctic_onramp_rate  # noqa: E402
+from src.services.antarctic import (  # noqa: E402
+    AntarcticTokenManager,
+    _build_admin_message,
+    fetch_antarctic_onramp_rate,
+)
 from src.utils.storage import WhitelistStorage  # noqa: E402
 from scripts.test_antarctic_refresh import mask_token  # noqa: E402
 
@@ -112,6 +116,16 @@ class FakeBot:
 
 
 class AntarcticNotificationTests(unittest.IsolatedAsyncioTestCase):
+    def test_fallback_notification_does_not_ask_to_refresh_tokens(self):
+        message = _build_admin_message(
+            "SBP endpoint Antarctic вернул HTTP 422. Использую резервный общий buyRate USDT/RUB.",
+            title="⚠️ Antarctic Wallet: основной SBP-курс недоступен.",
+            action="Действий с токенами сейчас не требуется.",
+        )
+
+        self.assertIn("Действий с токенами сейчас не требуется.", message)
+        self.assertNotIn("обновите config/antarctic_tokens.json", message)
+
     async def test_missing_token_file_notifies_admin_once(self):
         manager = AntarcticTokenManager()
         bot = FakeBot()
@@ -141,8 +155,8 @@ class AntarcticNotificationTests(unittest.IsolatedAsyncioTestCase):
             async def force_refresh(self):
                 return False
 
-            async def _notify_admin(self, key, reason):
-                self.messages.append((key, reason))
+            async def _notify_admin(self, key, reason, **kwargs):
+                self.messages.append((key, reason, kwargs))
 
         class FakeResponse:
             def __init__(self, status_code, data, text=""):
@@ -189,8 +203,11 @@ class AntarcticNotificationTests(unittest.IsolatedAsyncioTestCase):
             rate = await fetch_antarctic_onramp_rate()
 
         self.assertEqual(rate, 101.25)
-        self.assertEqual(fake_manager.messages[0][0], "onramp_fallback")
-        self.assertIn("422", fake_manager.messages[0][1])
+        key, reason, kwargs = fake_manager.messages[0]
+        self.assertEqual(key, "onramp_fallback")
+        self.assertIn("422", reason)
+        self.assertIn("основной SBP-курс", kwargs["title"])
+        self.assertIn("Действий с токенами сейчас не требуется", kwargs["action"])
 
 
 class TokenScriptTests(unittest.TestCase):
