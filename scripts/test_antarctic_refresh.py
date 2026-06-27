@@ -44,6 +44,12 @@ def save_tokens(access_token: str, refresh_token: str):
     print(f"[+] Tokens saved to {TOKENS_FILE}")
 
 
+def mask_token(token: str, visible: int = 8) -> str:
+    if len(token) <= visible:
+        return "***"
+    return f"...{token[-visible:]}"
+
+
 async def fetch_rates(session: AsyncSession, access_token: str) -> dict | None:
     r = await session.get(
         f"{API_BASE}/coins/rates",
@@ -88,8 +94,8 @@ async def main():
     print(f"  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 60)
 
-    print(f"\n  Access token:  ...{access_token[-20:]}")
-    print(f"  Refresh token: {refresh_tok}")
+    print(f"\n  Access token:  {mask_token(access_token, 20)}")
+    print(f"  Refresh token: {mask_token(refresh_tok)}")
 
     async with AsyncSession(impersonate="chrome110") as session:
         # Step 1: Try current tokens
@@ -114,8 +120,8 @@ async def main():
         exp = new_tokens["expiredAt"]
         exp_dt = datetime.fromtimestamp(exp, tz=timezone.utc)
 
-        print(f"  New access token:  ...{new_access[-20:]}")
-        print(f"  New refresh token: {new_refresh}")
+        print(f"  New access token:  {mask_token(new_access, 20)}")
+        print(f"  New refresh token: {mask_token(new_refresh)}")
         print(f"  Expires at:        {exp_dt.strftime('%Y-%m-%d %H:%M:%S UTC')}")
 
         # Step 3: Save new tokens

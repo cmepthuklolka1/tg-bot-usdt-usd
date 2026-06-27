@@ -4,6 +4,7 @@
 """
 import asyncio
 import logging
+from contextlib import suppress
 from aiogram import Bot, Dispatcher
 
 from src.config import config, init_whitelist, init_banned_sellers, init_user_settings
@@ -125,6 +126,7 @@ async def main():
     dp.include_router(user.router)
     dp.include_router(admin.router)
 
+    bg_task = None
     try:
         await bot.delete_webhook(drop_pending_updates=True)
         # Устанавливаем команды для интерфейса Telegram
@@ -136,7 +138,10 @@ async def main():
         logger.info("Бот запущен и ожидает сообщений...")
         await dp.start_polling(bot)
     finally:
-        bg_task.cancel()
+        if bg_task:
+            bg_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await bg_task
         await bot.session.close()
         logger.info("Бот остановлен.")
 

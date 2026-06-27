@@ -1,24 +1,61 @@
 import json
 import logging
+import os
+import tempfile
+import threading
+from pathlib import Path
 from ..config import config
 
 logger = logging.getLogger(__name__)
+_FILE_LOCKS: dict[str, threading.RLock] = {}
+
+
+def _lock_for(path) -> threading.RLock:
+    key = str(Path(path).resolve())
+    if key not in _FILE_LOCKS:
+        _FILE_LOCKS[key] = threading.RLock()
+    return _FILE_LOCKS[key]
+
+
+def _write_json_atomic(path, data: dict, *, ensure_ascii: bool = True):
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    lock = _lock_for(target)
+    with lock:
+        fd, tmp_name = tempfile.mkstemp(
+            prefix=f".{target.name}.",
+            suffix=".tmp",
+            dir=target.parent,
+            text=True,
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=4, ensure_ascii=ensure_ascii)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_name, target)
+        except Exception:
+            try:
+                os.unlink(tmp_name)
+            except FileNotFoundError:
+                pass
+            raise
 
 class WhitelistStorage:
     def __init__(self, path=config.whitelist_path):
         self.path = path
     
     def _read_data(self) -> dict:
-        try:
-            with open(self.path, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError) as e:
-            logger.error(f"Error reading whitelist: {e}")
-            return {"users": []}
+        with _lock_for(self.path):
+            try:
+                with open(self.path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except (FileNotFoundError, json.JSONDecodeError) as e:
+                logger.error(f"Error reading whitelist: {e}")
+                return {"users": []}
 
     def _write_data(self, data: dict):
-        with open(self.path, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=4)
+        _write_json_atomic(self.path, data)
 
     def is_allowed(self, user_id: int) -> bool:
         if user_id == config.admin_id:
@@ -51,16 +88,16 @@ class BannedSellersStorage:
         self.path = path
     
     def _read_data(self) -> dict:
-        try:
-            with open(self.path, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError) as e:
-            logger.error(f"Error reading banned sellers: {e}")
-            return {"banned": []}
+        with _lock_for(self.path):
+            try:
+                with open(self.path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except (FileNotFoundError, json.JSONDecodeError) as e:
+                logger.error(f"Error reading banned sellers: {e}")
+                return {"banned": []}
 
     def _write_data(self, data: dict):
-        with open(self.path, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=4)
+        _write_json_atomic(self.path, data)
 
     def get_banned(self) -> set[str]:
         data = self._read_data()
@@ -113,16 +150,16 @@ class UserSettingsStorage:
         self.path = path
 
     def _read_data(self) -> dict:
-        try:
-            with open(self.path, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError) as e:
-            logger.error(f"Error reading user settings: {e}")
-            return {"users": {}}
+        with _lock_for(self.path):
+            try:
+                with open(self.path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except (FileNotFoundError, json.JSONDecodeError) as e:
+                logger.error(f"Error reading user settings: {e}")
+                return {"users": {}}
 
     def _write_data(self, data: dict):
-        with open(self.path, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=4, ensure_ascii=False)
+        _write_json_atomic(self.path, data, ensure_ascii=False)
 
     def get_exchange_settings(self, user_id: int, exchange: str) -> dict:
         """Возвращает настройки отображения для конкретной биржи.
@@ -170,15 +207,15 @@ class PinnedMessageStorage:
         self.path = path
     
     def _read_data(self) -> dict:
-        try:
-            with open(self.path, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            return {"pinned": {}}
+        with _lock_for(self.path):
+            try:
+                with open(self.path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except (FileNotFoundError, json.JSONDecodeError):
+                return {"pinned": {}}
 
     def _write_data(self, data: dict):
-        with open(self.path, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=4)
+        _write_json_atomic(self.path, data)
 
     def get_all(self) -> dict:
         return self._read_data().get("pinned", {})

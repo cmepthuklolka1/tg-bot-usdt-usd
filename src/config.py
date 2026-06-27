@@ -35,11 +35,9 @@ class Settings(BaseSettings):
 
 try:
     config = Settings()
-except Exception as e:
-    logger.error(f"Failed to load configuration: {e}")
-    # Initialize with dummy values for testing if .env is missing 
-    # (In a real app, you might want this to crash gracefully)
-    config = Settings(bot_token="dummy", admin_id=0)
+except Exception:
+    logger.exception("Failed to load configuration. Check BOT_TOKEN and ADMIN_ID in .env")
+    raise
 
 def init_whitelist():
     """Ensure whitelist.json exists and has correct structure"""

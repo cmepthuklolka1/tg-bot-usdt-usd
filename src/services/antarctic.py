@@ -24,7 +24,8 @@ class AntarcticTokenManager:
         self._loaded: bool = False
         self._lock = asyncio.Lock()
         self._bot = None
-        self._admin_notified: bool = False
+        self._last_notification_key: str | None = None
+        self._last_load_error: str = ""
 
     def set_bot(self, bot):
         self._bot = bot
@@ -33,6 +34,7 @@ class AntarcticTokenManager:
         path = config.antarctic_tokens_path
         if not path.exists():
             logger.info("Antarctic: token file not found, skipping")
+            self._last_load_error = "Файл config/antarctic_tokens.json не найден."
             return False
         try:
             with open(path, encoding="utf-8") as f:
@@ -40,10 +42,16 @@ class AntarcticTokenManager:
             self._access_token = data["access_token"]
             self._refresh_token = data["refresh_token"]
             self._expires_at = self._decode_exp(self._access_token)
+            if not self._expires_at:
+                self._last_load_error = "Access token не похож на корректный JWT или не содержит exp."
+                logger.error("Antarctic: access token has no valid exp")
+                return False
             self._loaded = True
+            self._last_load_error = ""
             logger.info(f"Antarctic: tokens loaded, expires at {self._expires_at}")
             return True
         except Exception as e:
+            self._last_load_error = f"Не удалось прочитать файл токенов: {e}"
             logger.error(f"Antarctic: failed to load tokens: {e}")
             return False
 
@@ -96,7 +104,7 @@ class AntarcticTokenManager:
             self._refresh_token = new_data["refreshToken"]
             self._expires_at = new_data["expiredAt"]
             self._save_tokens()
-            self._admin_notified = False  # reset after successful refresh
+            self._last_notification_key = None  # reset after successful refresh
             logger.info(f"Antarctic: token refreshed, expires at {self._expires_at}")
             return True
         except Exception as e:
@@ -105,16 +113,18 @@ class AntarcticTokenManager:
         finally:
             await session.close()
 
-    async def _notify_admin(self):
-        if self._admin_notified or not self._bot:
+    async def _notify_admin(self, key: str, reason: str):
+        if self._last_notification_key == key or not self._bot:
             return
-        self._admin_notified = True
         try:
             await self._bot.send_message(
                 config.admin_id,
-                "⚠️ Antarctic Wallet: токен истёк, требуется ручной перелогин.\n"
-                "Обновите config/antarctic_tokens.json на сервере.",
+                "⚠️ Antarctic Wallet: курс временно недоступен.\n\n"
+                f"Причина: {reason}\n\n"
+                "Что сделать: заново войдите в Antarctic Wallet и обновите "
+                "config/antarctic_tokens.json на сервере.",
             )
+            self._last_notification_key = key
         except Exception as e:
             logger.error(f"Antarctic: failed to notify admin: {e}")
 
@@ -122,6 +132,10 @@ class AntarcticTokenManager:
         async with self._lock:
             if not self._loaded:
                 if not self._load_tokens():
+                    await self._notify_admin(
+                        "load_failed",
+                        self._last_load_error or "Не удалось загрузить токены.",
+                    )
                     return None
 
             if self._needs_refresh():
@@ -129,10 +143,17 @@ class AntarcticTokenManager:
                 if not success:
                     if time.time() >= self._expires_at:
                         # Токен реально истёк — без него не обойтись
-                        await self._notify_admin()
+                        await self._notify_admin(
+                            "expired_refresh_failed",
+                            "Access token истёк, а refresh token не смог получить новую пару токенов.",
+                        )
                         return None
                     # Рефреш не удался, но токен ещё жив — используем его
                     logger.warning("Antarctic: refresh failed, using current token until expiry")
+                    await self._notify_admin(
+                        "refresh_failed_token_alive",
+                        "Не удалось заранее обновить токены, текущий access token пока ещё работает.",
+                    )
 
             return self._access_token
 
@@ -140,7 +161,10 @@ class AntarcticTokenManager:
         async with self._lock:
             success = await self._do_refresh()
             if not success:
-                await self._notify_admin()
+                await self._notify_admin(
+                    "force_refresh_failed",
+                    "API вернул 401, но принудительный refresh не смог получить новую пару токенов.",
+                )
             return success
 
 
@@ -186,15 +210,27 @@ async def fetch_antarctic_onramp_rate() -> float | None:
         data = r.json()
         if data.get("status") != "ok":
             logger.warning(f"Antarctic: unexpected status: {data.get('status')}")
+            await token_manager._notify_admin(
+                "rate_status_not_ok",
+                f"API курса вернул неожиданный статус: {data.get('status')}.",
+            )
             return None
         rate_obj = data.get("data", {}).get("rate")
         if not rate_obj:
             logger.warning("Antarctic: no rate in response")
+            await token_manager._notify_admin(
+                "rate_missing",
+                "API курса не вернул поле data.rate.",
+            )
             return None
         usdt_per_rub = rate_obj["amount"] / (10 ** rate_obj["scale"])
         return round(1.0 / usdt_per_rub, 2)
     except Exception as e:
         logger.error(f"Antarctic: fetch error: {e}")
+        await token_manager._notify_admin(
+            "fetch_error",
+            f"Ошибка при запросе курса: {e}",
+        )
         return None
     finally:
         await session.close()

@@ -1,4 +1,5 @@
 import logging
+from html import escape
 from aiogram import Router, F, Bot
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
@@ -160,10 +161,11 @@ async def cmd_ban_seller(message: Message, state: FSMContext):
 @router.message(AdminStates.waiting_for_ban_seller)
 async def process_ban_seller(message: Message, state: FSMContext):
     seller_name = message.text.strip()
+    seller_display = escape(seller_name)
     if banned_storage.ban_seller(seller_name):
-        await message.answer(f"✅ Продавец <b>{seller_name}</b> добавлен в чёрный список.", parse_mode="HTML")
+        await message.answer(f"✅ Продавец <b>{seller_display}</b> добавлен в чёрный список.", parse_mode="HTML")
     else:
-        await message.answer(f"ℹ️ Продавец <b>{seller_name}</b> уже есть в чёрном списке.", parse_mode="HTML")
+        await message.answer(f"ℹ️ Продавец <b>{seller_display}</b> уже есть в чёрном списке.", parse_mode="HTML")
         
     await state.clear()
 
@@ -181,7 +183,7 @@ async def cmd_unban_seller(message: Message, state: FSMContext):
         await message.answer("Чёрный список продавцов пуст.")
         return
         
-    banned_text = "\n".join([f"<code>{s}</code>" for s in banned])
+    banned_text = "\n".join([f"<code>{escape(s)}</code>" for s in banned])
     await message.answer(
         f"<b>Забаненные продавцы:</b>\n{banned_text}\n\n"
         "Введите имя продавца для удаления из ЧС (тапните по имени для копирования):",
@@ -192,9 +194,10 @@ async def cmd_unban_seller(message: Message, state: FSMContext):
 @router.message(AdminStates.waiting_for_unban_seller)
 async def process_unban_seller(message: Message, state: FSMContext):
     seller_name = message.text.strip()
+    seller_display = escape(seller_name)
     if banned_storage.unban_seller(seller_name):
-        await message.answer(f"✅ Продавец <b>{seller_name}</b> удалён из чёрного списка.", parse_mode="HTML")
+        await message.answer(f"✅ Продавец <b>{seller_display}</b> удалён из чёрного списка.", parse_mode="HTML")
     else:
-        await message.answer(f"ℹ️ Продавца <b>{seller_name}</b> нет в чёрном списке.", parse_mode="HTML")
+        await message.answer(f"ℹ️ Продавца <b>{seller_display}</b> нет в чёрном списке.", parse_mode="HTML")
         
     await state.clear()
