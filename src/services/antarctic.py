@@ -13,6 +13,8 @@ from ..config import config
 logger = logging.getLogger(__name__)
 
 API_BASE = "https://app.antarcticwallet.com/api/v2"
+GENERAL_RATES_URL = f"{API_BASE}/coins/rates"
+TOPUP_RATE_URL = "https://app.antarcticwallet.com/api/v3/topup/rub/exchange_rate"
 REFRESH_BEFORE_SEC = 86400  # refresh 24h before expiry
 
 
@@ -171,17 +173,55 @@ class AntarcticTokenManager:
 token_manager = AntarcticTokenManager()
 
 
+def _response_text(response, limit: int = 500) -> str:
+    text = getattr(response, "text", "") or ""
+    return text[:limit]
+
+
+async def _fetch_general_usdt_buy_rate(session: AsyncSession, access_token: str) -> float | None:
+    r = await session.get(
+        GENERAL_RATES_URL,
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "Accept": "application/json",
+        },
+        timeout=15,
+    )
+    if r.status_code == 401:
+        logger.warning("Antarctic: general rates got 401")
+        return None
+    if r.status_code >= 400:
+        logger.error(
+            "Antarctic: general rates failed, status %s, body: %s",
+            r.status_code,
+            _response_text(r),
+        )
+        return None
+    data = r.json()
+    if data.get("status") != "ok":
+        logger.warning("Antarctic: general rates unexpected status: %s", data.get("status"))
+        return None
+    for item in data.get("data", {}).get("items", []):
+        if item.get("coin") == "USDT":
+            try:
+                return round(float(item["buyRate"]), 2)
+            except (KeyError, TypeError, ValueError) as e:
+                logger.error("Antarctic: failed to parse general USDT buyRate: %s", e)
+                return None
+    logger.warning("Antarctic: USDT item not found in general rates response")
+    return None
+
+
 async def fetch_antarctic_onramp_rate() -> float | None:
     """Returns the USDT/RUB onramp (SBP buy) rate from Antarctic Wallet, or None on failure."""
     access_token = await token_manager.get_access_token()
     if not access_token:
         return None
 
-    url = "https://app.antarcticwallet.com/api/v3/topup/rub/exchange_rate"
     session = AsyncSession(impersonate="chrome110")
     try:
         r = await session.get(
-            url,
+            TOPUP_RATE_URL,
             headers={
                 "Authorization": f"Bearer {access_token}",
                 "Accept": "application/json",
@@ -198,13 +238,32 @@ async def fetch_antarctic_onramp_rate() -> float | None:
             if not new_token:
                 return None
             r = await session.get(
-                url,
+                TOPUP_RATE_URL,
                 headers={
                     "Authorization": f"Bearer {new_token}",
                     "Accept": "application/json",
                 },
                 timeout=15,
             )
+            access_token = new_token
+
+        if r.status_code >= 400:
+            body = _response_text(r)
+            logger.error(
+                "Antarctic: topup rate failed, status %s, body: %s",
+                r.status_code,
+                body,
+            )
+            fallback_rate = await _fetch_general_usdt_buy_rate(session, access_token)
+            if fallback_rate is not None:
+                await token_manager._notify_admin(
+                    "onramp_fallback",
+                    "SBP endpoint Antarctic вернул "
+                    f"HTTP {r.status_code}. Использую резервный общий buyRate USDT/RUB. "
+                    f"Ответ SBP endpoint: {body or '<empty>'}",
+                )
+                return fallback_rate
+            r.raise_for_status()
 
         r.raise_for_status()
         data = r.json()

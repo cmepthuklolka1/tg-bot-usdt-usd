@@ -12,9 +12,10 @@ os.environ.setdefault("BOT_TOKEN", "test-token")
 os.environ.setdefault("ADMIN_ID", "1")
 
 import main  # noqa: E402
+import src.services.antarctic as antarctic_module  # noqa: E402
 from src.domain.models import ExchangerOffer, P2PItem  # noqa: E402
 from src.handlers.user import _format_bc_line, _format_bybit_line  # noqa: E402
-from src.services.antarctic import AntarcticTokenManager  # noqa: E402
+from src.services.antarctic import AntarcticTokenManager, fetch_antarctic_onramp_rate  # noqa: E402
 from src.utils.storage import WhitelistStorage  # noqa: E402
 from scripts.test_antarctic_refresh import mask_token  # noqa: E402
 
@@ -128,6 +129,68 @@ class AntarcticNotificationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(bot.messages), 1)
         self.assertEqual(bot.messages[0][0], 123)
         self.assertIn("Antarctic Wallet", bot.messages[0][1])
+
+    async def test_topup_422_falls_back_to_general_buy_rate_and_notifies_admin(self):
+        class FakeTokenManager:
+            def __init__(self):
+                self.messages = []
+
+            async def get_access_token(self):
+                return "access-token"
+
+            async def force_refresh(self):
+                return False
+
+            async def _notify_admin(self, key, reason):
+                self.messages.append((key, reason))
+
+        class FakeResponse:
+            def __init__(self, status_code, data, text=""):
+                self.status_code = status_code
+                self._data = data
+                self.text = text
+
+            def json(self):
+                return self._data
+
+            def raise_for_status(self):
+                if self.status_code >= 400:
+                    raise RuntimeError(f"HTTP Error {self.status_code}: {self.text}")
+
+        class FakeSession:
+            def __init__(self, *args, **kwargs):
+                self.urls = []
+
+            async def get(self, url, headers=None, timeout=None):
+                self.urls.append(url)
+                if "topup/rub/exchange_rate" in url:
+                    return FakeResponse(422, {"status": "error"}, '{"error":"unprocessable"}')
+                if "coins/rates" in url:
+                    return FakeResponse(
+                        200,
+                        {
+                            "status": "ok",
+                            "data": {
+                                "items": [
+                                    {"coin": "BTC", "buyRate": "1000", "sellRate": "900"},
+                                    {"coin": "USDT", "buyRate": "101.25", "sellRate": "99.75"},
+                                ]
+                            },
+                        },
+                    )
+                raise AssertionError(f"Unexpected URL: {url}")
+
+            async def close(self):
+                pass
+
+        fake_manager = FakeTokenManager()
+        with patch.object(antarctic_module, "token_manager", fake_manager), \
+             patch.object(antarctic_module, "AsyncSession", FakeSession):
+            rate = await fetch_antarctic_onramp_rate()
+
+        self.assertEqual(rate, 101.25)
+        self.assertEqual(fake_manager.messages[0][0], "onramp_fallback")
+        self.assertIn("422", fake_manager.messages[0][1])
 
 
 class TokenScriptTests(unittest.TestCase):
