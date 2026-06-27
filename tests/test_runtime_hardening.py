@@ -284,6 +284,72 @@ class AntarcticNotificationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("резервный Antarctic SBP endpoint", reason)
         self.assertIn("onramp-курс", kwargs["title"])
 
+    async def test_cash_onramp_feature_disabled_uses_sbp_rate_without_admin_alert(self):
+        class FakeTokenManager:
+            def __init__(self):
+                self.messages = []
+
+            async def get_access_token(self):
+                return "access-token"
+
+            async def force_refresh(self):
+                return False
+
+            async def _notify_admin(self, key, reason, **kwargs):
+                self.messages.append((key, reason, kwargs))
+
+        class FakeResponse:
+            def __init__(self, status_code, data, text=""):
+                self.status_code = status_code
+                self._data = data
+                self.text = text
+
+            def json(self):
+                return self._data
+
+            def raise_for_status(self):
+                if self.status_code >= 400:
+                    raise RuntimeError(f"HTTP Error {self.status_code}: {self.text}")
+
+        class FakeSession:
+            def __init__(self, *args, **kwargs):
+                self.urls = []
+
+            async def get(self, url, headers=None, timeout=None):
+                self.urls.append(url)
+                if url == CASH_ONRAMP_RATE_URL:
+                    return FakeResponse(
+                        422,
+                        {
+                            "data": None,
+                            "errors": {"base": ["FEATURE_DISABLED"]},
+                            "message": "AW bank-onramp is disabled",
+                            "status": "unprocessable_entity",
+                        },
+                        (
+                            '{"data":null,"errors":{"base":["FEATURE_DISABLED"]},'
+                            '"message":"AW bank-onramp is disabled",'
+                            '"status":"unprocessable_entity"}'
+                        ),
+                    )
+                if url == ANTARCTIC_SBP_RATE_URL:
+                    return FakeResponse(
+                        200,
+                        {"status": "ok", "data": {"rate": {"amount": 8248, "scale": 2}}},
+                    )
+                raise AssertionError(f"Unexpected URL: {url}")
+
+            async def close(self):
+                pass
+
+        fake_manager = FakeTokenManager()
+        with patch.object(antarctic_module, "token_manager", fake_manager), \
+             patch.object(antarctic_module, "AsyncSession", FakeSession):
+            rate = await fetch_antarctic_onramp_rate()
+
+        self.assertEqual(rate, 82.48)
+        self.assertEqual(fake_manager.messages, [])
+
     async def test_onramp_api_failures_fall_back_to_general_buy_rate_and_notify_admin(self):
         class FakeTokenManager:
             def __init__(self):

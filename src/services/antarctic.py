@@ -226,6 +226,14 @@ def _parse_rub_per_usdt_rate(data: dict) -> float | None:
     return round(rate, 2)
 
 
+def _has_feature_disabled_error(data: dict) -> bool:
+    errors = data.get("errors")
+    if not isinstance(errors, dict):
+        return False
+    base_errors = errors.get("base")
+    return isinstance(base_errors, list) and "FEATURE_DISABLED" in base_errors
+
+
 async def _fetch_general_usdt_buy_rate(session: AsyncSession, access_token: str) -> float | None:
     r = await session.get(
         GENERAL_RATES_URL,
@@ -298,6 +306,7 @@ async def fetch_antarctic_onramp_rate() -> float | None:
             )
 
         failures: list[str] = []
+        alert_failures: list[str] = []
         endpoints = [
             ("cash onramp", CASH_ONRAMP_RATE_URL),
             ("Antarctic SBP", ANTARCTIC_SBP_RATE_URL),
@@ -307,13 +316,25 @@ async def fetch_antarctic_onramp_rate() -> float | None:
             r = await get_rate_response(url)
             if r.status_code >= 400:
                 body = _response_text(r)
-                failures.append(f"{label}: HTTP {r.status_code}, body: {body or '<empty>'}")
-                logger.error(
-                    "Antarctic: %s rate failed, status %s, body: %s",
-                    label,
-                    r.status_code,
-                    body,
-                )
+                failure = f"{label}: HTTP {r.status_code}, body: {body or '<empty>'}"
+                failures.append(failure)
+                try:
+                    data = r.json()
+                except Exception:
+                    data = {}
+                if label == "cash onramp" and _has_feature_disabled_error(data):
+                    logger.info(
+                        "Antarctic: %s rate disabled by feature flag, using next endpoint",
+                        label,
+                    )
+                else:
+                    alert_failures.append(failure)
+                    logger.error(
+                        "Antarctic: %s rate failed, status %s, body: %s",
+                        label,
+                        r.status_code,
+                        body,
+                    )
                 continue
 
             r.raise_for_status()
@@ -330,24 +351,25 @@ async def fetch_antarctic_onramp_rate() -> float | None:
                 continue
 
             if index > 0:
-                await token_manager._notify_admin(
-                    "onramp_secondary_fallback",
-                    "Основной cash onramp endpoint Antarctic недоступен. "
-                    f"Использую резервный Antarctic SBP endpoint. "
-                    f"Проблема: {'; '.join(failures)}",
-                    title="⚠️ Antarctic Wallet: основной onramp-курс недоступен.",
-                    action=(
-                        "Действий с токенами сейчас не требуется: access token принят, "
-                        "резервный Antarctic SBP-курс получен. Если нужен именно курс "
-                        "«Счёт по реквизитам», проверьте его доступность в веб-кабинете."
-                    ),
-                )
+                if alert_failures:
+                    await token_manager._notify_admin(
+                        "onramp_secondary_fallback",
+                        "Основной cash onramp endpoint Antarctic недоступен. "
+                        f"Использую резервный Antarctic SBP endpoint. "
+                        f"Проблема: {'; '.join(alert_failures)}",
+                        title="⚠️ Antarctic Wallet: основной onramp-курс недоступен.",
+                        action=(
+                            "Действий с токенами сейчас не требуется: access token принят, "
+                            "резервный Antarctic SBP-курс получен. Если нужен именно курс "
+                            "«Счёт по реквизитам», проверьте его доступность в веб-кабинете."
+                        ),
+                    )
             return rate
 
-        if failures:
+        if alert_failures:
             logger.error(
                 "Antarctic: onramp rate endpoints failed: %s",
-                "; ".join(failures),
+                "; ".join(alert_failures),
             )
             fallback_rate = await _fetch_general_usdt_buy_rate(session, access_token)
             if fallback_rate is not None:
@@ -355,7 +377,7 @@ async def fetch_antarctic_onramp_rate() -> float | None:
                     "onramp_fallback",
                     "Onramp endpoints Antarctic недоступны. "
                     f"Использую резервный общий buyRate USDT/RUB. "
-                    f"Проблемы onramp endpoints: {'; '.join(failures)}",
+                    f"Проблемы onramp endpoints: {'; '.join(alert_failures)}",
                     title="⚠️ Antarctic Wallet: основной onramp-курс недоступен.",
                     action=(
                         "Действий с токенами сейчас не требуется: access token принят, "
