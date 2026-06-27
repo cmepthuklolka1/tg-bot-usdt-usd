@@ -22,7 +22,7 @@ def load_token() -> str:
 
 
 def _scale_value(obj: dict) -> float:
-    """Convert {amount: 1169434, scale: 8} → 0.01169434"""
+    """Convert {amount: 8251, scale: 2} → 82.51"""
     return obj["amount"] / (10 ** obj["scale"])
 
 
@@ -79,7 +79,9 @@ async def main():
             print("=" * 50)
 
             r2 = await session.get(url, headers=headers, timeout=15)
-            r2.raise_for_status()
+            if r2.status_code >= 400:
+                print(f"  HTTP {r2.status_code}: {r2.text[:500]}")
+                continue
             data2 = r2.json()
 
             if data2.get("status") != "ok":
@@ -87,7 +89,7 @@ async def main():
             else:
                 rate_obj = data2["data"]["rate"]
                 if isinstance(rate_obj, dict):
-                    rub_per_usdt = 1.0 / _scale_value(rate_obj)
+                    rub_per_usdt = _scale_value(rate_obj)
                 else:
                     rub_per_usdt = _normalize_rate(rate_obj)
                 ttl = data2["data"].get("ttl", "?")

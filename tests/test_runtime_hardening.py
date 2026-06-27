@@ -187,6 +187,46 @@ class AntarcticNotificationTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(rate, 82.36)
 
+    async def test_onramp_scaled_rate_object_is_parsed_as_rub_per_usdt(self):
+        class FakeTokenManager:
+            async def get_access_token(self):
+                return "access-token"
+
+            async def force_refresh(self):
+                return False
+
+            async def _notify_admin(self, key, reason, **kwargs):
+                raise AssertionError("Admin should not be notified on successful rate fetch")
+
+        class FakeResponse:
+            status_code = 200
+            text = '{"status":"ok"}'
+
+            def json(self):
+                return {
+                    "status": "ok",
+                    "data": {"rate": {"amount": 8251, "scale": 2}, "ttl": 34},
+                }
+
+            def raise_for_status(self):
+                pass
+
+        class FakeSession:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def get(self, url, headers=None, timeout=None):
+                return FakeResponse()
+
+            async def close(self):
+                pass
+
+        with patch.object(antarctic_module, "token_manager", FakeTokenManager()), \
+             patch.object(antarctic_module, "AsyncSession", FakeSession):
+            rate = await fetch_antarctic_onramp_rate()
+
+        self.assertEqual(rate, 82.51)
+
     async def test_cash_onramp_422_tries_antarctic_sbp_rate_before_general_fallback(self):
         class FakeTokenManager:
             def __init__(self):

@@ -206,12 +206,12 @@ def _parse_rub_per_usdt_rate(data: dict) -> float | None:
 
     if isinstance(rate_obj, dict):
         try:
-            usdt_per_rub = rate_obj["amount"] / (10 ** rate_obj["scale"])
+            rate = rate_obj["amount"] / (10 ** rate_obj["scale"])
         except (KeyError, TypeError, ValueError, ZeroDivisionError):
             return None
-        if usdt_per_rub <= 0:
+        if rate <= 0:
             return None
-        return round(1.0 / usdt_per_rub, 2)
+        return round(rate, 2)
 
     try:
         rate = float(str(rate_obj).replace(",", "."))
