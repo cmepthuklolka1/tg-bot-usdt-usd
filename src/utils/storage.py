@@ -43,6 +43,7 @@ class WhitelistStorage:
             users.remove(user_id)
             data["users"] = users
             self._write_data(data)
+            return True
         return False
 
 class BannedSellersStorage:

@@ -71,7 +71,7 @@ def get_settings_bc_payment_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="Альфа-Банк", callback_data="bc_pay_alfaclick")],
         [InlineKeyboardButton(text="Т-Банк",     callback_data="bc_pay_tinkoff")],
         [InlineKeyboardButton(text="ВТБ",         callback_data="bc_pay_vtb")],
-        [InlineKeyboardButton(text="◀️ Назад",   callback_data="settings_bestchange")],
+        [InlineKeyboardButton(text="◀️ Назад",   callback_data="settings_menu")],
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -83,7 +83,7 @@ def get_settings_bc_coin_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="USDT TRC20", callback_data="bc_coin_tether-trc20")],
         [InlineKeyboardButton(text="USDT BEP20", callback_data="bc_coin_tether-bep20")],
         [InlineKeyboardButton(text="USDT TON",   callback_data="bc_coin_tether-ton")],
-        [InlineKeyboardButton(text="◀️ Назад",   callback_data="settings_bestchange")],
+        [InlineKeyboardButton(text="◀️ Назад",   callback_data="settings_menu")],
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -106,6 +106,6 @@ def get_settings_bybit_amount_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="200K", callback_data="bybit_amount_200000"),
          InlineKeyboardButton(text="500K", callback_data="bybit_amount_500000")],
         [InlineKeyboardButton(text="✏️ Своё значение", callback_data="bybit_amount_custom")],
-        [InlineKeyboardButton(text="◀️ Назад", callback_data="settings_bybit")],
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="settings_menu")],
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
