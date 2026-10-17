@@ -1,0 +1,109 @@
+{
+  "antarctic": {
+    "degraded": false,
+    "error_kind": null,
+    "source": "Antarctic SBP"
+  },
+  "checked_at": 1792225242.2161531,
+  "checkout": "615e1839995d14a11fa8ebfcd9089cdeddcce67c",
+  "code_sha256": {
+    "deploy.sh": "4b59b74ef54b8de53ea47e7a0e351f81740e0d4e7273b9d3b74a55df25ab4398",
+    "install.sh": "f8a2802d3a905aeaf4d8ac81750e6e221e12abc764bdff954e1714b4f54a85fd",
+    "main.py": "c79bd130a336a38a690a4a94be2e21f70d55cc0ad1dfd0965c5017737d0697ee",
+    "reports/review_probes.py": "d26629a88b3aaa73a062b8951cd2317d5039e9d88ac902a5117e89302804ebbd",
+    "requirements.txt": "621fa06ffe449634cac5488e3fdc98c4738af919673d8384f93e1f9f93b5f4a0",
+    "scripts/release.py": "029777751dedaaf6b1960662cc3dafc8789880d7ff42977f44c03549aa0d5796",
+    "scripts/test_abcex.py": "1831bf459334d4bcbc6c5e55975029a80a28c9a8b3267a7ae7892434ce79e96b",
+    "scripts/test_antarctic.py": "8f6371e84545cef7a0f20bed4cb70f98cc176a054829d65114a1ce5602a9017d",
+    "scripts/test_antarctic_refresh.py": "28727e34e6e9f9fe6e91846e91b4ce2138b078f7d838574acbe7c99dd1eae8e3",
+    "scripts/test_uniswap_owb.py": "9f3cc8073bd6b7a5ca8e5f7425f47d77faa3607f4fdf4f8cf010b50b13cbf1e2",
+    "src/__init__.py": "b95dc82ca1648e9c54677c391d2f62e5dc672fe80620c141cd3f7a9523844d73",
+    "src/config.py": "3f2e0f45a957f75d5a2eb9746bf8fb09ba14b9b72fe5fe48ed9ecfa97af861ef",
+    "src/domain/__init__.py": "f608555461302ff49b400fd735bab87dc2f66bf921f4b0a8389d48be1b83860d",
+    "src/domain/models.py": "163b6d6625c4b2c5b9edde3aae88c299dbbedd921fc45b02744d6939185e96bc",
+    "src/domain/render.py": "5f71f81d29f78bcd30bd3f96d5592ad5bfc1fcf239021f66723b5f40732a8fef",
+    "src/handlers/__init__.py": "fcf233a666c0442dd0d9b364521bc25ac81edc804164250b254ea190575455f3",
+    "src/handlers/access.py": "db6522647dcd1aac589f3ac2718a53ef1787093dd8839931e39b337be1f50dfa",
+    "src/handlers/admin.py": "982d858b782d547113264722ef7bab465755cccb38a225d31c6cbbdc28660859",
+    "src/handlers/user.py": "61f337abe26fe62d16a57bb171b399740387ef4ed852b92c3f92a54de47a6c02",
+    "src/keyboards/__init__.py": "fb20ea24df780c08b5243ea1b6881a6fba15f32f8a482555e76e3b6e21b69021",
+    "src/keyboards/menus.py": "cd51512d9fa502487878d90fbdc6eb8dedb102ddde67010ac5dfc48bb35c2782",
+    "src/services/__init__.py": "09c1a5a35657fc1644b41df919c35cbfaf4328d66605695c5f0efd6c6967e7a1",
+    "src/services/abcex.py": "c306c585bfe9de948b8c1c344e44b3383e56a275f8391adf8712cb898fa57104",
+    "src/services/antarctic.py": "06bf7a5d7905118bcf33fe184935b6650465a0c499a4e3090cbab5c49a66cfa4",
+    "src/services/bestchange.py": "b471ce3480e6f8121bc880339424bfe9c127ff91ab942ae6788ca9d8e38248c8",
+    "src/services/bybit_p2p.py": "79a23c94d5ca52fc77260028a49dea2fddaec4ad5e0581b52f71b1f84dcbfd74",
+    "src/services/cbrf.py": "048ae5e324db7b89df80961f9a135546fad0d13d11a3adf0df72adae433e2e05",
+    "src/services/incidents.py": "8fdf95a5613172c8b8e790c7546da1cd44d45b4d3650fc9b83a02496caff0d3a",
+    "src/services/publishing.py": "7b5f647a36e26fd520274a74d34888c24be1ceb4a1f611716dc25db11866abe4",
+    "src/services/reports.py": "c5e440e9552e5c2e9a6eeb1fc6e79b1d81d964b6aa59fc9c2685adfe9e8ab3f8",
+    "src/services/uniswap.py": "d1a2ab033470dbc17303717971088b027001f97b4bac6a42d006234de30261a2",
+    "src/utils/__init__.py": "b5540d6d3452cf489a8da2ab1ba9767383c0602f0423c032dfa95a92e052d629",
+    "src/utils/commands.py": "5519f6d41831f751e2882ce7ef509082cb9b3fdc0370bd4bab05e84740242acc",
+    "src/utils/http.py": "25b8ea49e7d23dd296f23e152882776d0fa6609158a817a20e44a722e1903e57",
+    "src/utils/retry.py": "64bd47df780f6c9d39471d71f90e3635a30d3c6fb68ee7ae321a24067f734b11",
+    "src/utils/storage.py": "89d1c1e5a00a0675122edfa0882f1e2e9f992962a1ce4d797f1b8aff5ea29fd7",
+    "tests/test_access_storage.py": "0606066171f94afeb7146f5374c468059d5385397e1ac304f94b5fb448af7a67",
+    "tests/test_aggregation.py": "7f63ae44bdde3969db472e53933a981e69f584a53fbed41800ded2332c5d83e6",
+    "tests/test_antarctic_reliability.py": "de907af19294a2eb51be3bb69492cc3136f3143b9b1c15fe9818855782b9995d",
+    "tests/test_http_policy.py": "288b6ee20c7887fe0e9a52ac97a82ffd24614a744d3b5db63a0f30bbfcc69adf",
+    "tests/test_incidents.py": "6249c6a4917340101f18f8b5232d292f2a9038365ab3eeca8abe26daeba3eaaf",
+    "tests/test_publisher.py": "7ce21733a4d6ce99f06eca4cf9d4e999ed7b7a9bb2960e83a7ae3440a6899d91",
+    "tests/test_regressions.py": "8f9bd24509d34edd6ff67859fed4eef439e8f5c1d918dfa8db7a810e7ca3454f",
+    "tests/test_release.py": "8f5e449516f41e5da5bd9e351888e23a4454e62c49bd2363d1e318c983c95605",
+    "tests/test_reliability.py": "ccbb4ab3d294230470fa7be96aef946644b9294019dfa77c611bd51497888d5c",
+    "tests/test_runtime_hardening.py": "ff96efcf97fcb43e28dd7d7574f46d5870750ae3de28ac6cc5b23c7fcd7ffe01",
+    "tests/test_runtime_updates.py": "d48135215dfa13db0f5143de1916b6214f6abc68da6634a6bf522cd039379351",
+    "tests/test_service_contracts.py": "838244cc82d7a50a0b88e504ce3963945a4fc8b41107d8e52b5dea59ddc51b4b"
+  },
+  "health": {
+    "antarctic_recovering": false,
+    "checked_at": 1792225217.045685,
+    "pid": 3002734,
+    "version": "615e1839995d14a11fa8ebfcd9089cdeddcce67c"
+  },
+  "log_counts": {
+    "event=background_update_completed": 1,
+    "event=quote_received": 1
+  },
+  "release": "615e1839995d14a11fa8ebfcd9089cdeddcce67c",
+  "secret_modes": {
+    ".env": "0o600",
+    "config/antarctic_tokens.json": "0o600"
+  },
+  "service": {
+    "ActiveState": "active",
+    "ExecMainStartTimestamp": "Sat 2026-10-17 10:19:14 CEST",
+    "MainPID": "3002734",
+    "NRestarts": "0",
+    "NoNewPrivileges": "yes",
+    "ProtectHome": "yes",
+    "ProtectSystem": "strict",
+    "SubState": "running",
+    "UMask": "0077"
+  },
+  "sources": {
+    "abcex": {
+      "fetched_at": 1792225157.4817657
+    },
+    "antarctic": {
+      "fetched_at": 1792225157.4566345
+    },
+    "bestchange:sberbank:tether-bep20": {
+      "fetched_at": 1792225157.446535
+    },
+    "bestchange:vtb:tether-bep20": {
+      "fetched_at": 1792225157.8261352
+    },
+    "bybit": {
+      "fetched_at": 1792225157.4971335
+    },
+    "cbrf": {
+      "fetched_at": 1792225157.4659953
+    },
+    "uniswap": {
+      "fetched_at": 1792225157.4730492
+    }
+  },
+  "working_tree_clean": true
+}
