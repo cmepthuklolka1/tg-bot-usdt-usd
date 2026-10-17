@@ -143,7 +143,7 @@ RestrictSUIDSGID=yes
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--install-dir", type=Path, default=Path("/opt/crypto-exkurs-bot"))
-    parser.add_argument("--ref", default="origin/master")
+    parser.add_argument("--ref", default="@{upstream}")
     parser.add_argument("--prepare-only", action="store_true")
     parser.add_argument("--service", default="crypto-exkurs-bot")
     args = parser.parse_args()
