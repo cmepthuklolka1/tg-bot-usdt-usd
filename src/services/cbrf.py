@@ -1,7 +1,7 @@
 import xml.etree.ElementTree as ET
 from datetime import datetime
 import logging
-from curl_cffi.requests import AsyncSession
+from ..utils.http import shared_session, check_response, request_timeout
 
 from ..domain.models import CBRFRate
 from ..utils.retry import CBRF_RETRY
@@ -16,9 +16,9 @@ HEADERS = {
 @CBRF_RETRY
 async def fetch_usd_rub_rate() -> CBRFRate:
     """Fetches official USD/RUB exchange rate from CBRF."""
-    async with AsyncSession(impersonate="chrome110") as session:
-        response = await session.get(URL, headers=HEADERS, timeout=10)
-        response.raise_for_status()
+    async with shared_session() as session:
+        response = await session.get(URL, headers=HEADERS, timeout=request_timeout())
+        check_response(response)
 
         root = ET.fromstring(response.content)
         date_str = root.attrib.get('Date', '')

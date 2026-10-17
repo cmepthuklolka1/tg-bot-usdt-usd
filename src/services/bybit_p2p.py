@@ -1,5 +1,5 @@
 import logging
-from curl_cffi.requests import AsyncSession
+from ..utils.http import shared_session, check_response, request_timeout
 
 from ..domain.models import BybitP2PResponse, P2PItem
 from ..utils.retry import DEFAULT_RETRY
@@ -47,38 +47,27 @@ PAYLOAD = {
 
 
 @DEFAULT_RETRY
-async def fetch_bybit_p2p_rates(min_amount: float = 100_000.0) -> list[P2PItem]:
+async def fetch_bybit_offers() -> list[P2PItem]:
     """Fetches and filters P2P USDT/RUB rates from Bybit's internal JSON API."""
-    async with AsyncSession(impersonate="chrome110") as session:
-        response = await session.post(URL, headers=HEADERS, json=PAYLOAD, timeout=15)
-        response.raise_for_status()
+    async with shared_session() as session:
+        response = await session.post(URL, headers=HEADERS, json=PAYLOAD, timeout=request_timeout())
+        check_response(response)
 
-        try:
-            data = response.json()
-            validated_response = BybitP2PResponse(**data)
-        except Exception as e:
-            logger.error(f"Bybit JSON schema mismatch: {e}")
-            raise ValueError(f"Failed to validate Bybit response: {e}")
+        data = response.json()
+        if not isinstance(data, dict) or data.get("ret_code") != 0:
+            raise ValueError("Bybit returned a non-success status")
+        return BybitP2PResponse(**data).result.items
 
-        if validated_response.retCode != 0:
-            logger.warning(f"Bybit non-zero retCode: {validated_response.retMsg}")
-            return []
 
-        items = validated_response.result.items
+def filter_bybit_offers(items: list[P2PItem], amount: float, banned=None) -> list[P2PItem]:
+    """Amount is the user's actual order size in RUB, not a seller-limit threshold."""
+    banned_lower = {name.lower() for name in (banned_storage.get_banned() if banned is None else banned)}
+    return [item for item in items
+            if item.minAmount <= amount <= item.maxAmount
+            and item.quantity * item.price >= amount
+            and set(item.payments) & WANTED_PAYMENT_IDS
+            and item.nickName.lower() not in banned_lower]
 
-        # Filter 1: maxAmount >= min_amount (user-configurable threshold)
-        # Filter 2: seller must accept at least one of our wanted payment methods
-        # Filter 3: seller must not be in the banned sellers blacklist
-        banned_lower = {name.lower() for name in banned_storage.get_banned()}
-        filtered = [
-            item for item in items
-            if item.maxAmount >= min_amount
-            and bool(set(item.payments) & WANTED_PAYMENT_IDS)
-            and item.nickName.lower() not in banned_lower
-        ]
 
-        logger.info(
-            f"Bybit P2P: {len(items)} total, {len(filtered)} after maxAmount >= "
-            f"{min_amount:.0f} RUB + payment whitelist + ban filter"
-        )
-        return filtered
+async def fetch_bybit_p2p_rates(min_amount: float = 100_000.0) -> list[P2PItem]:
+    return filter_bybit_offers(await fetch_bybit_offers(), min_amount)

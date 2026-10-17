@@ -1,4 +1,5 @@
 import json
+import os
 import logging
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -12,7 +13,7 @@ BASE_DIR = Path(__file__).parent.parent
 class Settings(BaseSettings):
     bot_token: str = Field(..., env='BOT_TOKEN')
     admin_id: int = Field(..., env='ADMIN_ID')
-    
+
     # Path to whitelist file
     whitelist_path: Path = Field(default=BASE_DIR / 'config' / 'whitelist.json')
     banned_sellers_path: Path = Field(default=BASE_DIR / 'config' / 'banned_sellers.json')
@@ -24,11 +25,23 @@ class Settings(BaseSettings):
     antarctic_tokens_path: Path = Field(default=BASE_DIR / 'config' / 'antarctic_tokens.json')
 
     # Wait configurations for fetching
-    fetch_timeout: int = Field(default=15)
-    fetch_retries: int = Field(default=3)
+    pinned_messages_path: Path = Field(default=BASE_DIR / 'config' / 'pinned_messages.json')
+    runtime_state_path: Path = Field(default=BASE_DIR / 'config' / 'runtime_state.json')
+    fetch_timeout: float = Field(default=15, gt=0, le=60)
+    connect_timeout: float = Field(default=4, gt=0, le=15)
+    fetch_retries: int = Field(default=3, ge=1, le=5)
+    source_timeout: float = Field(default=40, gt=0, le=120)
+    report_timeout: float = Field(default=45, gt=0, le=180)
+    cache_ttl: float = Field(default=30, ge=0)
+    max_stale_seconds: int = Field(default=3600, ge=0)
+    recovery_interval: float = Field(default=60, ge=1)
+    notification_failures: int = Field(default=2, ge=1)
+    notification_reminder: int = Field(default=3600, ge=60)
+    update_interval: float = Field(default=3600, ge=1)
+    max_http_clients: int = Field(default=6, ge=1, le=20)
 
     model_config = SettingsConfigDict(
-        env_file=str(BASE_DIR / '.env'),
+        env_file=os.environ.get('BOT_ENV_FILE', str(BASE_DIR / '.env')),
         env_file_encoding='utf-8',
         extra='ignore'
     )

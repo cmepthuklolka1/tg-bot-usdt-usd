@@ -1,6 +1,6 @@
 import logging
 from bs4 import BeautifulSoup
-from curl_cffi.requests import AsyncSession
+from ..utils.http import shared_session, check_response, request_timeout
 
 from ..domain.models import ExchangerOffer, BestChangeRates
 from ..utils.retry import DEFAULT_RETRY
@@ -32,9 +32,9 @@ async def fetch_bestchange_rates(
 ) -> BestChangeRates:
     """Scrapes exchange table from BestChange for given payment method and coin."""
     url = BASE_URL.format(payment=payment, coin=coin)
-    async with AsyncSession(impersonate="chrome110") as session:
-        response = await session.get(url, headers=HEADERS, timeout=15)
-        response.raise_for_status()
+    async with shared_session() as session:
+        response = await session.get(url, headers=HEADERS, timeout=request_timeout())
+        check_response(response)
 
         # Защита: если BestChange не знает slug, он редиректит на главную
         final_url = str(response.url)
@@ -44,77 +44,88 @@ async def fetch_bestchange_rates(
                 f"payment='{payment}', coin='{coin}'. URL was: {url}"
             )
 
-        soup = BeautifulSoup(response.content, 'html.parser')
-        
-        # The main exchange table on bestchange has id="content_table"
-        table = soup.find('table', id='content_table')
-        if not table:
-            raise ValueError("BestChange table 'content_table' not found.")
-            
-        tbody = table.find('tbody')
-        if not tbody:
-            raise ValueError("BestChange table <tbody> not found.")
-            
-        # Extract rows, ignoring hidden or header rows
-        # Bestchange uses .odd and .even classes for regular rows
-        rows = tbody.find_all('tr', recursive=False)
-        
-        valid_offers = []
-        seen_names: set[str] = set()  # Дедупликация: один обменник → одно лучшее предложение
-        for row in rows:
-            # Rows might not have classes, let's just attempt extraction
-            tds = row.find_all('td')
-            if len(tds) < 4:
+        return parse_bestchange_html(response.content)
+
+
+def parse_bestchange_html(content: str | bytes) -> BestChangeRates:
+    soup = BeautifulSoup(content, 'html.parser')
+
+    # The main exchange table on bestchange has id="content_table"
+    table = soup.find('table', id='content_table')
+    if not table:
+        raise ValueError("BestChange table 'content_table' not found.")
+
+    tbody = table.find('tbody')
+    if not tbody:
+        raise ValueError("BestChange table <tbody> not found.")
+
+    # Extract rows, ignoring hidden or header rows
+    # Bestchange uses .odd and .even classes for regular rows
+    rows = tbody.find_all('tr', recursive=False)
+
+    valid_offers = []
+    candidate_rows = 0
+    seen_names: set[str] = set()  # Дедупликация: один обменник → одно лучшее предложение
+    for row in rows:
+        # Rows might not have classes, let's just attempt extraction
+        tds = row.find_all('td')
+        if len(tds) >= 4 or row.find('div', class_='bj') or set(row.get('class', [])) & {'odd', 'even'}:
+            candidate_rows += 1
+        if len(tds) < 4:
+            continue
+
+        # Column 1: Exchanger name
+        # The .bj div contains an <a> tag with the name, followed by <span> tooltip badges.
+        # We take only the <a> tag text to avoid tooltip pollution.
+        name_div = tds[1].find('div', class_='bj')
+        if name_div:
+            name_link = name_div.find('a')
+            exchanger_name = name_link.text.strip() if name_link else name_div.contents[0].strip() if name_div.contents else ""
+        else:
+            # Fallback: first line of text
+            exchanger_name = tds[1].get_text(separator='\n').split('\n')[0].strip()
+
+        if not exchanger_name:
+            continue
+
+        # Пропускаем дубли: BestChange может показывать один обменник несколько раз
+        # (разные лимиты/резервы). Таблица отсортирована по курсу — первое вхождение лучшее.
+        name_key = exchanger_name.lower()
+        if name_key in seen_names:
+            continue
+
+        # Column 2: Give (RUB)
+        give_td = tds[2]
+        give_fs = give_td.find('div', class_='fs')
+        give_text = give_fs.text if give_fs else give_td.text
+        # Remove currency label (e.g. "Сбербанк RUB", "Альфа-Банк RUB")
+        give_text = give_text.split('RUB')[0].strip()
+
+        # Column 3: Get (USDT)
+        get_td = tds[3]
+        get_fs = get_td.find('div', class_='fs')
+        get_text = get_fs.text if get_fs else get_td.text
+        get_text = get_text.split('USDT')[0].strip()
+
+        try:
+            give_val = clean_float(give_text)
+            get_val = clean_float(get_text)
+
+            if give_val <= 0 or get_val <= 0:
                 continue
-
-            # Column 1: Exchanger name
-            # The .bj div contains an <a> tag with the name, followed by <span> tooltip badges.
-            # We take only the <a> tag text to avoid tooltip pollution.
-            name_div = tds[1].find('div', class_='bj')
-            if name_div:
-                name_link = name_div.find('a')
-                exchanger_name = name_link.text.strip() if name_link else name_div.contents[0].strip() if name_div.contents else ""
-            else:
-                # Fallback: first line of text
-                exchanger_name = tds[1].get_text(separator='\n').split('\n')[0].strip()
-
-            if not exchanger_name:
-                continue
-
-            # Пропускаем дубли: BestChange может показывать один обменник несколько раз
-            # (разные лимиты/резервы). Таблица отсортирована по курсу — первое вхождение лучшее.
-            name_key = exchanger_name.lower()
-            if name_key in seen_names:
-                continue
-            seen_names.add(name_key)
-
-            # Column 2: Give (RUB)
-            give_td = tds[2]
-            give_fs = give_td.find('div', class_='fs')
-            give_text = give_fs.text if give_fs else give_td.text
-            # Remove currency label (e.g. "Сбербанк RUB", "Альфа-Банк RUB")
-            give_text = give_text.split('RUB')[0].strip()
-
-            # Column 3: Get (USDT)
-            get_td = tds[3]
-            get_fs = get_td.find('div', class_='fs')
-            get_text = get_fs.text if get_fs else get_td.text
-            get_text = get_text.split('USDT')[0].strip()
-
-            try:
-                give_val = clean_float(give_text)
-                get_val = clean_float(get_text)
-
-                valid_offers.append(
-                    ExchangerOffer(
-                        exchanger_name=exchanger_name,
-                        give_rub=give_val,
-                        get_usdt=get_val,
-                        rate=give_val / get_val if get_val > 0 else 0
-                    )
+            valid_offers.append(
+                ExchangerOffer(
+                    exchanger_name=exchanger_name,
+                    give_rub=give_val,
+                    get_usdt=get_val,
+                    rate=give_val / get_val
                 )
-            except ValueError:
-                continue # Skip rows that couldn't be parsed
+            )
+            seen_names.add(name_key)
+        except ValueError:
+            continue # Skip rows that couldn't be parsed
 
-        logger.info(f"BestChange ({payment} → {coin}): {len(valid_offers)} unique offers parsed")
-        return BestChangeRates(offers=valid_offers)
+    if candidate_rows and not valid_offers:
+        raise ValueError("BestChange offer rows no longer match the expected format")
+    logger.info("source=bestchange event=parsed offers=%s", len(valid_offers))
+    return BestChangeRates(offers=valid_offers)

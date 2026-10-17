@@ -2,7 +2,7 @@
 
 import logging
 
-from curl_cffi.requests import AsyncSession
+from ..utils.http import shared_session, check_response, request_timeout
 
 from ..utils.retry import DEFAULT_RETRY
 
@@ -15,13 +15,13 @@ INSTRUMENT = "USDTRUB"
 @DEFAULT_RETRY
 async def fetch_abcex_prices() -> tuple[float, float] | None:
     """Returns (buy, sell) prices from ABCEX orderbook, or None on failure."""
-    async with AsyncSession(impersonate="chrome110") as session:
+    async with shared_session() as session:
         r = await session.get(
             f"{BASE_URL}/v2/exchange/public/orderbook/depth",
             params={"instrumentCode": INSTRUMENT},
-            timeout=15,
+            timeout=request_timeout(),
         )
-        r.raise_for_status()
+        check_response(r)
         data = r.json()
         bids = data.get("bid", [])
         asks = data.get("ask", [])

@@ -2,7 +2,7 @@
 
 import logging
 
-from curl_cffi.requests import AsyncSession
+from ..utils.http import shared_session, check_response, request_timeout
 
 from ..utils.retry import DEFAULT_RETRY
 
@@ -15,9 +15,9 @@ API_URL = f"https://api.dexscreener.com/latest/dex/tokens/{OWB_ADDRESS}"
 @DEFAULT_RETRY
 async def fetch_owb_usdc_price() -> float | None:
     """Returns OWB price in USDC from Uniswap V3 (Base), or None on failure."""
-    async with AsyncSession(impersonate="chrome110") as session:
-        r = await session.get(API_URL, timeout=15)
-        r.raise_for_status()
+    async with shared_session() as session:
+        r = await session.get(API_URL, timeout=request_timeout())
+        check_response(r)
         data = r.json()
         for pair in data.get("pairs", []):
             if pair.get("dexId") == "uniswap" and pair.get("quoteToken", {}).get("symbol") == "USDC":

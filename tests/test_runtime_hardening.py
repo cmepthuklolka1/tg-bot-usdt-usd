@@ -57,6 +57,7 @@ class ConfigTests(unittest.TestCase):
         env = os.environ.copy()
         env.pop("BOT_TOKEN", None)
         env.pop("ADMIN_ID", None)
+        env["BOT_ENV_FILE"] = "/dev/null"
         env["PYTHONPATH"] = str(Path.cwd())
 
         result = subprocess.run(
@@ -88,7 +89,6 @@ class MainLifecycleTests(unittest.IsolatedAsyncioTestCase):
                 raise RuntimeError("webhook failed")
 
         with patch.object(main, "Bot", FakeBot), \
-             patch.object(main.token_manager, "set_bot"), \
              patch.object(main, "init_whitelist"), \
              patch.object(main, "init_banned_sellers"), \
              patch.object(main, "init_user_settings"):
@@ -128,10 +128,9 @@ class AntarcticNotificationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Действий с токенами сейчас не требуется.", message)
         self.assertNotIn("обновите config/antarctic_tokens.json", message)
 
-    async def test_missing_token_file_notifies_admin_once(self):
+    async def test_missing_token_file_has_explicit_configuration_error(self):
         manager = AntarcticTokenManager()
         bot = FakeBot()
-        manager.set_bot(bot)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             token_path = Path(tmpdir) / "missing_tokens.json"
@@ -142,9 +141,8 @@ class AntarcticNotificationTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsNone(token)
         self.assertIsNone(token_again)
-        self.assertEqual(len(bot.messages), 1)
-        self.assertEqual(bot.messages[0][0], 123)
-        self.assertIn("Antarctic Wallet", bot.messages[0][1])
+        self.assertEqual(manager.error_kind, "configuration_error")
+        self.assertEqual(bot.messages, [])
 
     async def test_cash_onramp_rate_string_is_parsed_like_web_app(self):
         class FakeTokenManager:
@@ -275,14 +273,12 @@ class AntarcticNotificationTests(unittest.IsolatedAsyncioTestCase):
         fake_manager = FakeTokenManager()
         with patch.object(antarctic_module, "token_manager", fake_manager), \
              patch.object(antarctic_module, "AsyncSession", FakeSession):
-            rate = await fetch_antarctic_onramp_rate()
+            quote = await antarctic_module.fetch_antarctic_quote()
 
-        self.assertEqual(rate, 82.44)
-        key, reason, kwargs = fake_manager.messages[0]
-        self.assertEqual(key, "onramp_secondary_fallback")
-        self.assertIn("422", reason)
-        self.assertIn("резервный Antarctic SBP endpoint", reason)
-        self.assertIn("onramp-курс", kwargs["title"])
+        self.assertEqual(quote.rate, 82.44)
+        self.assertTrue(quote.degraded)
+        self.assertEqual(quote.source, "Antarctic SBP")
+        self.assertEqual(fake_manager.messages, [])
 
     async def test_cash_onramp_feature_disabled_uses_sbp_rate_without_admin_alert(self):
         class FakeTokenManager:
@@ -406,14 +402,12 @@ class AntarcticNotificationTests(unittest.IsolatedAsyncioTestCase):
         fake_manager = FakeTokenManager()
         with patch.object(antarctic_module, "token_manager", fake_manager), \
              patch.object(antarctic_module, "AsyncSession", FakeSession):
-            rate = await fetch_antarctic_onramp_rate()
+            quote = await antarctic_module.fetch_antarctic_quote()
 
-        self.assertEqual(rate, 101.25)
-        key, reason, kwargs = fake_manager.messages[0]
-        self.assertEqual(key, "onramp_fallback")
-        self.assertIn("422", reason)
-        self.assertIn("основной onramp-курс", kwargs["title"])
-        self.assertIn("Действий с токенами сейчас не требуется", kwargs["action"])
+        self.assertEqual(quote.rate, 101.25)
+        self.assertTrue(quote.degraded)
+        self.assertEqual(quote.source, "общий buyRate (резерв)")
+        self.assertEqual(fake_manager.messages, [])
 
 
 class TokenScriptTests(unittest.TestCase):

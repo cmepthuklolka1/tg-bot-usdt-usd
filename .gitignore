@@ -20,6 +20,11 @@ config/banned_sellers.json
 config/pinned_messages.json
 config/user_settings.json
 config/antarctic_tokens.json
+config/runtime_state.json
+config/rate_cache.json
+config/health.json
+.venv/
+.releases/
 
 # Логи
 *.log

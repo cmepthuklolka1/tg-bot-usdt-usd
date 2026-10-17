@@ -1,5 +1,6 @@
 #!/bin/bash
-set -e
+set -euo pipefail
+umask 077
 
 INSTALL_DIR="/opt/crypto-exkurs-bot"
 SERVICE_NAME="crypto-exkurs-bot"
@@ -17,12 +18,18 @@ if [ "$SOURCE_DIR" != "$INSTALL_DIR" ]; then
     sudo mkdir -p "$INSTALL_DIR"
     sudo rsync -a \
         --exclude='venv/' \
+        --exclude='.venv/' \
+        --exclude='.releases/' \
+        --exclude='.env' \
         --exclude='__pycache__/' \
         --exclude='config/antarctic_tokens.json' \
         --exclude='config/whitelist.json' \
         --exclude='config/banned_sellers.json' \
         --exclude='config/pinned_messages.json' \
         --exclude='config/user_settings.json' \
+        --exclude='config/runtime_state.json' \
+        --exclude='config/rate_cache.json' \
+        --exclude='config/health.json' \
         "$SOURCE_DIR/" "$INSTALL_DIR/"
     sudo chown -R "$CURRENT_USER:$CURRENT_USER" "$INSTALL_DIR"
     echo "  → Файлы скопированы в $INSTALL_DIR"
@@ -54,13 +61,18 @@ for f in whitelist banned_sellers pinned_messages user_settings; do
         echo "  → Создан config/${f}.json"
     fi
 done
+chmod 600 "$INSTALL_DIR/.env"
+if [ -f "$INSTALL_DIR/config/antarctic_tokens.json" ]; then
+    chmod 600 "$INSTALL_DIR/config/antarctic_tokens.json"
+fi
 
 # 5. Файл systemd-службы
 echo "[5/5] Создание файла службы systemd..."
 sudo tee "$SERVICE_FILE" > /dev/null <<EOF
 [Unit]
 Description=USDT Rate Monitor Bot
-After=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
@@ -69,6 +81,13 @@ WorkingDirectory=${INSTALL_DIR}
 ExecStart=${INSTALL_DIR}/venv/bin/python ${INSTALL_DIR}/main.py
 Restart=on-failure
 RestartSec=5
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadWritePaths=${INSTALL_DIR}/config
+Environment=PYTHONDONTWRITEBYTECODE=1
 StandardOutput=journal
 StandardError=journal
 
