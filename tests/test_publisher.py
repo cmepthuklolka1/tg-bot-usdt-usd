@@ -22,7 +22,43 @@ class PublisherTests(unittest.IsolatedAsyncioTestCase):
         self.storage = PinnedMessageStorage(Path(self.tmp.name)/"pins.json")
         self.storage.set_pinned(1, 42)
         self.publisher = ReportPublisher(self.storage)
-        self.bot = SimpleNamespace(get_chat=AsyncMock(), edit_message_text=AsyncMock(), send_message=AsyncMock(return_value=SimpleNamespace(message_id=43)), pin_chat_message=AsyncMock(), delete_message=AsyncMock())
+        self.bot = SimpleNamespace(get_chat=AsyncMock(), edit_message_text=AsyncMock(), send_message=AsyncMock(return_value=SimpleNamespace(message_id=43)), pin_chat_message=AsyncMock(), unpin_chat_message=AsyncMock(), delete_message=AsyncMock())
+
+    async def test_visible_menu_becomes_the_canonical_report(self):
+        self.assertTrue(await self.publisher.update(self.bot, 1, "report", message_id=100))
+        self.assertEqual(self.storage.get_all(), {"1":100})
+        self.bot.edit_message_text.assert_awaited_once()
+        self.assertEqual(self.bot.edit_message_text.call_args.kwargs["message_id"], 100)
+        self.bot.pin_chat_message.assert_awaited_once_with(chat_id=1, message_id=100, disable_notification=True)
+        self.bot.unpin_chat_message.assert_awaited_once_with(chat_id=1, message_id=42)
+        self.bot.send_message.assert_not_awaited()
+
+    async def test_failed_pin_preserves_previous_report_until_retry_succeeds(self):
+        self.bot.pin_chat_message.side_effect = [TimeoutError(), None]
+        self.assertFalse(await self.publisher.update(self.bot, 1, "report", message_id=100))
+        self.assertEqual(self.storage.get_all(), {"1":42})
+        self.bot.unpin_chat_message.assert_not_awaited()
+        self.assertTrue(await self.publisher.update(self.bot, 1, "report", message_id=100))
+        self.assertEqual(self.storage.get_all(), {"1":100})
+        self.bot.send_message.assert_not_awaited()
+
+    async def test_concurrent_open_of_same_menu_does_not_duplicate_reports(self):
+        await asyncio.gather(*(self.publisher.update(self.bot, 1, "report", message_id=100) for _ in range(3)))
+        self.assertEqual(self.storage.get_all(), {"1":100})
+        self.bot.send_message.assert_not_awaited()
+        self.bot.pin_chat_message.assert_awaited_once()
+
+    async def test_missing_clicked_menu_uses_a_new_report_and_replaces_previous_pin(self):
+        self.bot.edit_message_text.side_effect = TelegramBadRequest(EditMessageText(text="x"), "message to edit not found")
+        self.assertTrue(await self.publisher.update(self.bot, 1, "report", message_id=100))
+        self.assertEqual(self.storage.get_all(), {"1":43})
+        self.bot.send_message.assert_awaited_once()
+        self.bot.unpin_chat_message.assert_awaited_once_with(chat_id=1, message_id=42)
+
+    async def test_unpin_failure_does_not_undo_successful_visible_report(self):
+        self.bot.unpin_chat_message.side_effect = TimeoutError()
+        self.assertTrue(await self.publisher.update(self.bot, 1, "report", message_id=100))
+        self.assertEqual(self.storage.get_all(), {"1":100})
 
     async def test_transient_edit_failure_keeps_pin_and_does_not_send(self):
         self.bot.edit_message_text.side_effect = TimeoutError()
