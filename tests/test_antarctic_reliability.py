@@ -116,6 +116,16 @@ class TokenTests(unittest.IsolatedAsyncioTestCase):
             await self.manager.close()
         self.assertEqual(json.loads(self.path.read_text())["refresh_token"], "rotated")
 
+    async def test_pending_disk_retry_preserves_a_new_manual_replacement(self):
+        await self.manager.get_access_token()
+        self.manager._dirty = True
+        self.manager._access_token = jwt(int(time.time())+300000)
+        self.manager._refresh_token = "rotated-not-saved"
+        manual = jwt(int(time.time())+400000)
+        self.path.write_text(json.dumps({"access_token":manual, "refresh_token":"manual"}))
+        self.assertEqual(await self.manager.get_access_token(), manual)
+        self.assertEqual(json.loads(self.path.read_text())["refresh_token"], "manual")
+
 
 class EndpointTests(unittest.IsolatedAsyncioTestCase):
     async def test_second_access_401_after_accepted_refresh_does_not_request_relogin(self):

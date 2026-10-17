@@ -135,7 +135,12 @@ class AntarcticTokenManager:
         async with self._lock:
             # Never reload the old on-disk pair after a rotated pair failed to save.
             if self._dirty:
-                self._persist()
+                try:
+                    manually_changed = self._file_signature() != self._signature
+                except OSError:
+                    manually_changed = False
+                if not (manually_changed and self._load_tokens()):
+                    self._persist()
             else:
                 self._load_tokens()
             if not self._loaded:
