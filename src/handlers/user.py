@@ -1,6 +1,4 @@
 import logging
-from html import escape
-from datetime import datetime
 from aiogram import Router, F
 from aiogram.enums import ContentType
 from aiogram.types import Message, CallbackQuery
@@ -9,24 +7,22 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
 from ..config import config
-from ..domain.models import ExchangeRateReport, RateSection
 from ..keyboards.menus import (
-    get_main_menu_keyboard, get_rates_keyboard,
+    get_main_menu_keyboard,
     get_settings_exchange_keyboard, get_settings_mode_keyboard, get_settings_input_keyboard,
     get_settings_bc_menu_keyboard, get_settings_bc_payment_keyboard, get_settings_bc_coin_keyboard,
     get_settings_bybit_menu_keyboard, get_settings_bybit_amount_keyboard,
 )
-from ..services.cbrf import fetch_usd_rub_rate
-from ..services.bestchange import fetch_bestchange_rates
-from ..services.bybit_p2p import fetch_bybit_p2p_rates
-from ..services.abcex import fetch_abcex_prices
-from ..services.antarctic import fetch_antarctic_onramp_rate
-from ..services.uniswap import fetch_owb_usdc_price
+from ..services.reports import _format_amount_label, _format_bc_line, _format_bybit_line, _apply_display_settings
 from ..utils.storage import (
     WhitelistStorage, PinnedMessageStorage, UserSettingsStorage, DISPLAY_DEFAULTS,
 )
 
+from .access import AccessMiddleware
+
 router = Router()
+router.message.outer_middleware(AccessMiddleware())
+router.callback_query.outer_middleware(AccessMiddleware())
 logger = logging.getLogger(__name__)
 storage = WhitelistStorage()
 settings_storage = UserSettingsStorage()
@@ -85,44 +81,6 @@ def _is_bybit(exchange: str) -> bool:
     return exchange.startswith("bybit")
 
 
-async def _get_actual_pinned_id(bot, chat_id: int) -> int | None:
-    """Возвращает message_id реально закреплённого сообщения в Telegram, или None."""
-    try:
-        chat_info = await bot.get_chat(chat_id)
-        if chat_info.pinned_message:
-            return chat_info.pinned_message.message_id
-    except Exception:
-        pass
-    return None
-
-
-def _format_bc_line(offer) -> str:
-    return f"{offer.rate:>6.2f} ₽  {escape(offer.exchanger_name)}"
-
-
-def _format_bybit_line(item) -> str:
-    return f"{item.price:>6.2f} ₽  {escape(item.nickName)}"
-
-
-def _apply_display_settings(items: list, settings: dict, format_fn) -> list[tuple[int, str]]:
-    """Применяет настройки отображения (подряд / по номерам) к списку элементов.
-    Возвращает список (номер_позиции, отформатированная_строка)."""
-    mode = settings.get("mode", "sequential")
-    value = settings.get("value", 10)
-
-    if mode == "sequential":
-        n = value if isinstance(value, int) else 10
-        return [(i + 1, format_fn(item)) for i, item in enumerate(items[:n])]
-    else:  # positions
-        positions = value if isinstance(value, list) else [1]
-        result = []
-        for pos in sorted(positions):
-            idx = pos - 1
-            if 0 <= idx < len(items):
-                result.append((pos, format_fn(items[idx])))
-        return result
-
-
 def _format_settings_text(user_id: int) -> str:
     """Форматирует текст с текущими настройками пользователя."""
     all_settings = settings_storage.get_all_settings(user_id)
@@ -147,13 +105,6 @@ def _format_settings_text(user_id: int) -> str:
             lines.append(f"<b>{label}:</b> [{amount_label}], {desc}")
     lines.append("\nВыберите биржу для настройки:")
     return "\n".join(lines)
-
-
-def _format_amount_label(amount: int) -> str:
-    """Форматирует сумму в удобный вид: 100000 → '100K', 1000000 → '1M'."""
-    if amount >= 1_000_000 and amount % 1_000_000 == 0:
-        return f"{amount // 1_000_000}M"
-    return f"{amount // 1000}K"
 
 
 def _format_bc_menu_text(user_id: int, exchange: str) -> str:
@@ -201,83 +152,8 @@ def _format_bybit_menu_text(user_id: int, exchange: str) -> str:
 # ─── Report Generation ───────────────────────────────────────
 
 async def generate_rates_report(user_id: int | None = None) -> str:
-    """Fetches all rates and returns the formatted telegram message."""
-    try:
-        cbrf = await fetch_usd_rub_rate()
-        cbrf_rate = cbrf.usd_rub
-    except Exception as e:
-        logger.error(f"Generate report CBRF error: {e}")
-        cbrf_rate = 0.0
-
-    abcex_buy: float | None = None
-    abcex_sell: float | None = None
-    try:
-        prices = await fetch_abcex_prices()
-        if prices:
-            abcex_buy, abcex_sell = prices
-    except Exception as e:
-        logger.error(f"Generate report ABCEX error: {e}")
-
-    antarctic_onramp: float | None = None
-    try:
-        antarctic_onramp = await fetch_antarctic_onramp_rate()
-    except Exception as e:
-        logger.error(f"Generate report Antarctic error: {e}")
-
-    owb_usdc: float | None = None
-    try:
-        owb_usdc = await fetch_owb_usdc_price()
-    except Exception as e:
-        logger.error(f"Generate report Uniswap OWB error: {e}")
-
-    sections: list[RateSection] = []
-
-    # BestChange-1, BestChange-2
-    for key in ("bestchange_1", "bestchange_2"):
-        if user_id:
-            s = settings_storage.get_exchange_settings(user_id, key)
-        else:
-            s = DISPLAY_DEFAULTS[key]
-        bc_payment = s.get("payment", "sberbank")
-        bc_coin = s.get("coin", "tether-bep20")
-        items: list[tuple[int, str]] = []
-        try:
-            bc = await fetch_bestchange_rates(payment=bc_payment, coin=bc_coin)
-            items = _apply_display_settings(bc.offers, s, _format_bc_line)
-        except Exception as e:
-            logger.error(f"Generate report {key} error: {e}")
-        pay_label = PAYMENT_SLUGS.get(bc_payment, bc_payment)
-        coin_label = COIN_SLUGS.get(bc_coin, bc_coin)
-        label = f"BestChange ({pay_label} → {coin_label})"
-        sections.append(RateSection(label=label, items=items))
-
-    # Bybit P2P-1, Bybit P2P-2
-    for key in ("bybit_1", "bybit_2"):
-        if user_id:
-            s = settings_storage.get_exchange_settings(user_id, key)
-        else:
-            s = DISPLAY_DEFAULTS[key]
-        by_max_amount = s.get("max_amount", 100000)
-        items = []
-        try:
-            bybit = await fetch_bybit_p2p_rates(min_amount=float(by_max_amount))
-            items = _apply_display_settings(bybit, s, _format_bybit_line)
-        except Exception as e:
-            logger.error(f"Generate report {key} error: {e}")
-        amount_label = _format_amount_label(by_max_amount)
-        bybit_label = f"Bybit P2P (USD\u200bT/RUB) [{amount_label}]"
-        sections.append(RateSection(label=bybit_label, items=items))
-
-    report = ExchangeRateReport(
-        cbrf_rate=cbrf_rate,
-        abcex_buy=abcex_buy,
-        abcex_sell=abcex_sell,
-        antarctic_onramp_rate=antarctic_onramp,
-        owb_usdc_price=owb_usdc,
-        sections=sections,
-        timestamp=datetime.now(),
-    )
-    return report.format_for_telegram()
+    from ..services.reports import generate_rates_report as build_report
+    return await build_report(user_id)
 
 
 # ─── /start и /settings Commands ────────────────────────────
@@ -314,97 +190,17 @@ async def cmd_settings(message: Message, state: FSMContext):
 
 # ─── Rates Handlers ──────────────────────────────────────────
 
-@router.callback_query(F.data == "show_rates")
+@router.callback_query(F.data.in_({"show_rates", "refresh_rates"}))
 async def cb_show_rates(callback: CallbackQuery):
-    if not storage.is_allowed(callback.from_user.id):
-        await callback.answer("Нет доступа.", show_alert=True)
-        return
-
-    await callback.answer("Загружаю актуальные курсы...")
-
-    pinned_storage = PinnedMessageStorage()
-    chat_id = callback.message.chat.id
-    old_msg_id = pinned_storage.get_all().get(str(chat_id))
-
-    # Всегда отправляем новое сообщение (чтобы оно было внизу чата)
-    try:
-        sent = await callback.bot.send_message(
-            chat_id=chat_id,
-            text="⏳ Загружаю данные с бирж...",
-        )
-        report_text = await generate_rates_report(user_id=callback.from_user.id)
-        await callback.bot.edit_message_text(
-            chat_id=chat_id,
-            message_id=sent.message_id,
-            text=report_text,
-            reply_markup=get_rates_keyboard(),
-            parse_mode="HTML",
-        )
-        # Закрепляем в чате
-        try:
-            await callback.bot.pin_chat_message(
-                chat_id=chat_id,
-                message_id=sent.message_id,
-                disable_notification=True,
-            )
-        except Exception as e:
-            logger.warning(f"Не удалось закрепить сообщение для {chat_id}: {e}")
-        pinned_storage.set_pinned(chat_id, sent.message_id)
-        # Удаляем старое сообщение с курсами (чтобы не было дубликатов)
-        if old_msg_id:
-            try:
-                await callback.bot.delete_message(chat_id=chat_id, message_id=old_msg_id)
-            except Exception:
-                pass  # >48ч или уже удалено — не страшно
-    except Exception as e:
-        logger.error(f"Ошибка отправки курсов: {e}")
-        await callback.bot.send_message(
-            chat_id=chat_id,
-            text="❌ Произошла ошибка при получении данных.",
-        )
+    await callback.answer("Обновляю курсы…")
+    from ..services.publishing import publisher
+    text = await generate_rates_report(callback.from_user.id)
+    if not await publisher.update(callback.bot, callback.message.chat.id, text):
+        logger.warning("source=telegram event=report_update_deferred")
 
 
-@router.callback_query(F.data == "refresh_rates")
-async def cb_refresh_rates(callback: CallbackQuery):
-    if not storage.is_allowed(callback.from_user.id):
-        await callback.answer("Нет доступа.", show_alert=True)
-        return
-
-    await callback.answer("Обновляю курсы...")
-
-    chat_id = callback.message.chat.id
-    try:
-        await callback.message.edit_text("⏳ Обновляю данные с бирж...")
-        report_text = await generate_rates_report(user_id=callback.from_user.id)
-        await callback.message.edit_text(
-            text=report_text,
-            reply_markup=get_rates_keyboard(),
-            parse_mode="HTML",
-        )
-    except Exception as e:
-        # Сообщение удалено или недоступно — создаём новое и закрепляем
-        logger.warning(f"Сообщение с курсами недоступно ({chat_id}), создаём новое: {e}")
-        pinned_storage = PinnedMessageStorage()
-        pinned_storage.remove_pinned(chat_id)
-        try:
-            report_text = await generate_rates_report(user_id=callback.from_user.id)
-            sent = await callback.bot.send_message(
-                chat_id=chat_id,
-                text=report_text,
-                reply_markup=get_rates_keyboard(),
-                parse_mode="HTML",
-            )
-            try:
-                await callback.bot.pin_chat_message(
-                    chat_id=chat_id,
-                    message_id=sent.message_id,
-                    disable_notification=True,
-                )
-            except Exception:
-                pass
-            pinned_storage.set_pinned(chat_id, sent.message_id)
-        except Exception as e2:
-            logger.error(f"Не удалось создать новое сообщение с курсами: {e2}")
+# Keep a stable import for integrations calling the previous handler directly.
+cb_refresh_rates = cb_show_rates
 
 
 @router.callback_query(F.data == "back_to_main")
@@ -600,7 +396,7 @@ async def cb_settings_bybit_section(callback: CallbackQuery, state: FSMContext):
             callback,
             f"<b>{label} — сумма сделки</b>\n"
             f"Текущая: <b>{amount_label}</b>\n\n"
-            f"Выберите минимальную сумму сделки:",
+            f"Выберите сумму вашей сделки:",
             get_settings_bybit_amount_keyboard(),
         )
     else:
@@ -694,7 +490,7 @@ async def process_bybit_amount_value(message: Message, state: FSMContext):
             await message.answer(full, reply_markup=get_settings_input_keyboard(), parse_mode="HTML")
 
     text = (message.text or "").strip()
-    if not text.isdigit() or int(text) < 1:
+    if not text.isdecimal() or int(text) < 1:
         await show_error("❌ Введите положительное целое число (например: <b>150000</b>).")
         return
     amount = int(text)
@@ -787,7 +583,7 @@ async def process_settings_value(message: Message, state: FSMContext):
     coin = data.get("coin")        # None для Bybit
 
     if mode == "sequential":
-        if not text.isdigit() or int(text) < 1:
+        if not text.isdecimal() or int(text) < 1:
             await show_error("❌ Введите положительное число (например: <b>10</b>).")
             return
         value = int(text)
@@ -803,7 +599,7 @@ async def process_settings_value(message: Message, state: FSMContext):
         if not parts:
             await show_error("❌ Неверный формат. Введите номера через запятую (например: <b>1, 3, 5, 7</b>).")
             return
-        if not all(p.isdigit() and int(p) >= 1 for p in parts):
+        if not all(p.isdecimal() and int(p) >= 1 for p in parts):
             await show_error("❌ Все номера должны быть положительными числами.\nПример: <b>1, 3, 5, 7</b>")
             return
         value = sorted(set(int(p) for p in parts))

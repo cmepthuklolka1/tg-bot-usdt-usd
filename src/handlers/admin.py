@@ -11,7 +11,11 @@ from ..utils.storage import WhitelistStorage, BannedSellersStorage
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
+from .access import AccessMiddleware
+
 router = Router()
+router.message.outer_middleware(AccessMiddleware(admin_only=True))
+router.callback_query.outer_middleware(AccessMiddleware(admin_only=True))
 logger = logging.getLogger(__name__)
 storage = WhitelistStorage()
 banned_storage = BannedSellersStorage()
@@ -43,9 +47,9 @@ async def cb_admin_menu(callback: CallbackQuery, state: FSMContext):
     if callback.from_user.id != config.admin_id:
         await callback.answer("У вас нет прав администратора.", show_alert=True)
         return
-        
+
     await state.clear()
-    
+
     text = (
         "<b>👮 Управление пользователями</b>\n\n"
         "Выдать доступ:\n"
@@ -67,16 +71,16 @@ async def cb_admin_menu(callback: CallbackQuery, state: FSMContext):
 async def cmd_add_user(message: Message, state: FSMContext):
     if message.from_user.id != config.admin_id:
         return
-    
+
     await message.answer("Введите ID пользователя, которому нужно выдать доступ:")
     await state.set_state(AdminStates.waiting_for_add_user)
 
 @router.message(AdminStates.waiting_for_add_user)
 async def process_add_user(message: Message, state: FSMContext, bot: Bot):
-    if not message.text.isdigit():
+    if not (message.text or "").isdecimal():
         await message.answer("❌ ID должен состоять только из цифр. Попробуйте ещё раз.")
         return
-        
+
     target_id = int(message.text)
     if storage.add_user(target_id):
         await message.answer(f"✅ Пользователь {target_id} успешно добавлен в белый список.")
@@ -96,12 +100,12 @@ async def process_add_user(message: Message, state: FSMContext, bot: Bot):
                 "Возможно, он ещё ни разу не запускал бота — пусть сделает <b>/start</b>.",
                 parse_mode="HTML"
             )
-            
+
         from ..utils.commands import set_bot_commands
         await set_bot_commands(bot)
     else:
         await message.answer(f"ℹ️ Пользователь {target_id} уже есть в белом списке.")
-        
+
     await state.clear()
 
 #
@@ -111,12 +115,12 @@ async def process_add_user(message: Message, state: FSMContext, bot: Bot):
 async def cmd_remove_user(message: Message, state: FSMContext):
     if message.from_user.id != config.admin_id:
         return
-    
+
     users = storage._read_data().get("users", [])
     if not users:
         await message.answer("Список пользователей пуст.")
         return
-        
+
     users_text = "\n".join([f"<code>{u}</code>" for u in users])
     await message.answer(
         f"<b>Текущие пользователи:</b>\n{users_text}\n\n"
@@ -127,23 +131,23 @@ async def cmd_remove_user(message: Message, state: FSMContext):
 
 @router.message(AdminStates.waiting_for_remove_user)
 async def process_remove_user(message: Message, state: FSMContext):
-    if not message.text.isdigit():
+    if not (message.text or "").isdecimal():
         await message.answer("❌ ID должен состоять только из цифр. Попробуйте ещё раз.")
         return
-        
+
     target_id = int(message.text)
     if target_id == config.admin_id:
         await message.answer("❌ Вы не можете удалить самого себя (Администратора) из белого списка.")
         await state.clear()
         return
-        
+
     if storage.remove_user(target_id):
         await message.answer(f"✅ Пользователь {target_id} удален из белого списка.")
         from ..utils.commands import set_bot_commands
         await set_bot_commands(message.bot)
     else:
         await message.answer(f"ℹ️ Пользователя {target_id} нет в белом списке.")
-        
+
     await state.clear()
 
 
@@ -154,19 +158,19 @@ async def process_remove_user(message: Message, state: FSMContext):
 async def cmd_ban_seller(message: Message, state: FSMContext):
     if message.from_user.id != config.admin_id:
         return
-    
+
     await message.answer("Введите имя продавца Bybit для добавления в чёрный список:")
     await state.set_state(AdminStates.waiting_for_ban_seller)
 
 @router.message(AdminStates.waiting_for_ban_seller)
 async def process_ban_seller(message: Message, state: FSMContext):
-    seller_name = message.text.strip()
+    seller_name = (message.text or "").strip()
     seller_display = escape(seller_name)
     if banned_storage.ban_seller(seller_name):
         await message.answer(f"✅ Продавец <b>{seller_display}</b> добавлен в чёрный список.", parse_mode="HTML")
     else:
         await message.answer(f"ℹ️ Продавец <b>{seller_display}</b> уже есть в чёрном списке.", parse_mode="HTML")
-        
+
     await state.clear()
 
 
@@ -177,12 +181,12 @@ async def process_ban_seller(message: Message, state: FSMContext):
 async def cmd_unban_seller(message: Message, state: FSMContext):
     if message.from_user.id != config.admin_id:
         return
-        
+
     banned = banned_storage.get_banned()
     if not banned:
         await message.answer("Чёрный список продавцов пуст.")
         return
-        
+
     banned_text = "\n".join([f"<code>{escape(s)}</code>" for s in banned])
     await message.answer(
         f"<b>Забаненные продавцы:</b>\n{banned_text}\n\n"
@@ -193,11 +197,11 @@ async def cmd_unban_seller(message: Message, state: FSMContext):
 
 @router.message(AdminStates.waiting_for_unban_seller)
 async def process_unban_seller(message: Message, state: FSMContext):
-    seller_name = message.text.strip()
+    seller_name = (message.text or "").strip()
     seller_display = escape(seller_name)
     if banned_storage.unban_seller(seller_name):
         await message.answer(f"✅ Продавец <b>{seller_display}</b> удалён из чёрного списка.", parse_mode="HTML")
     else:
         await message.answer(f"ℹ️ Продавца <b>{seller_display}</b> нет в чёрном списке.", parse_mode="HTML")
-        
+
     await state.clear()

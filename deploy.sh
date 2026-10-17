@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 INSTALL_DIR="/opt/crypto-exkurs-bot"
 SERVICE_NAME="crypto-exkurs-bot"
@@ -8,13 +8,7 @@ echo "=== Обновление USDT Rate Monitor Bot ==="
 echo "  Каталог: $INSTALL_DIR"
 
 cd "$INSTALL_DIR"
-git pull origin master
-
-echo "Обновление зависимостей..."
-"$INSTALL_DIR/venv/bin/pip" install -q -r "$INSTALL_DIR/requirements.txt"
-
-echo "✅ Код обновлён. Перезапуск службы..."
-sudo systemctl restart "$SERVICE_NAME"
-
-echo "✅ Готово!"
-sudo systemctl status "$SERVICE_NAME" --no-pager
+git diff --exit-code --quiet
+git diff --cached --exit-code --quiet
+git fetch origin
+"$INSTALL_DIR/venv/bin/python" "$INSTALL_DIR/scripts/release.py" --install-dir "$INSTALL_DIR" --service "$SERVICE_NAME" "$@"

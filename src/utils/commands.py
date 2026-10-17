@@ -21,13 +21,13 @@ async def set_bot_commands(bot: Bot):
         BotCommand(command="start", description="Главное меню"),
         BotCommand(command="settings", description="⚙️ Настройки отображения"),
     ]
-    
+
     try:
         await bot.delete_my_commands()
-        
+
         # Admin scope
         await bot.set_my_commands(commands=admin_cmds, scope=BotCommandScopeChat(chat_id=config.admin_id))
-        
+
         # User scopes
         storage = WhitelistStorage()
         users = storage._read_data().get("users", [])

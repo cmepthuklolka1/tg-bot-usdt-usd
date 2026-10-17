@@ -1,0 +1,162 @@
+{
+  "audit_date": "2026-10-17",
+  "repository": "https://github.com/cmepthuklolka1/tg-bot-usdt-usd",
+  "local_commit": "fa948c42e50fab3bca274bf4e1fc72a3b21fada2",
+  "github_head_and_master": "fa948c42e50fab3bca274bf4e1fc72a3b21fada2",
+  "server_alias": "vps-holland",
+  "server_commit": "fa948c42e50fab3bca274bf4e1fc72a3b21fada2",
+  "service": "crypto-exkurs-bot.service",
+  "install_directory": "/opt/crypto-exkurs-bot",
+  "service_user": "cmp",
+  "service_state": "active/running",
+  "process_start_utc": "2026-10-09T13:20:41Z",
+  "newest_tracked_python_file_mtime_utc": "2026-06-27T18:27:36.303826Z",
+  "server_python": "3.12",
+  "local_python": "3.14.8",
+  "server_pip_check": "No broken requirements found.",
+  "server_deleted_tracked_files": [
+    "config/banned_sellers.example.json",
+    "config/pinned_messages.example.json",
+    "config/user_settings.example.json",
+    "config/whitelist.example.json"
+  ],
+  "server_secret_file_modes": {
+    ".env": "0664",
+    "config/antarctic_tokens.json": "0644"
+  },
+  "server_systemd": {
+    "UMask": "0022",
+    "PrivateTmp": "no",
+    "ProtectHome": "no",
+    "ProtectSystem": "no",
+    "NoNewPrivileges": "no"
+  },
+  "logs": {
+    "window": "7 days before the audit",
+    "timestamps_timezone": "UTC",
+    "counts": {
+      "antarctic_feature_disabled": 349,
+      "antarctic_fetch_error": 9,
+      "antarctic_refresh_success": 2,
+      "antarctic_timeout": 9,
+      "pinned_recreated": 1,
+      "report_completed": 168,
+      "report_started": 168,
+      "telegram_connection_failure": 47,
+      "telegram_rate_limit": 14
+    },
+    "limit": 20000,
+    "recent_timestamps_utc": {
+      "antarctic_feature_disabled": [
+        "2026-10-17T04:43:18.745755+00:00",
+        "2026-10-17T04:43:21.331148+00:00",
+        "2026-10-17T05:43:23.355178+00:00",
+        "2026-10-17T05:43:25.615654+00:00",
+        "2026-10-17T06:43:27.761895+00:00",
+        "2026-10-17T06:43:30.507075+00:00",
+        "2026-10-17T07:43:32.825012+00:00",
+        "2026-10-17T07:43:35.335508+00:00"
+      ],
+      "antarctic_fetch_error": [
+        "2026-10-11T02:25:25.669368+00:00",
+        "2026-10-11T02:42:47.540043+00:00",
+        "2026-10-11T03:25:42.397663+00:00",
+        "2026-10-11T03:25:59.349654+00:00",
+        "2026-10-11T04:26:16.354733+00:00",
+        "2026-10-11T04:26:51.500685+00:00",
+        "2026-10-11T05:27:08.624724+00:00",
+        "2026-10-11T05:27:25.903240+00:00"
+      ],
+      "antarctic_refresh_success": [
+        "2026-10-11T16:28:33.081887+00:00",
+        "2026-10-15T16:39:08.805243+00:00"
+      ],
+      "antarctic_timeout": [
+        "2026-10-11T02:25:25.669368+00:00",
+        "2026-10-11T02:42:47.540043+00:00",
+        "2026-10-11T03:25:42.397663+00:00",
+        "2026-10-11T03:25:59.349654+00:00",
+        "2026-10-11T04:26:16.354733+00:00",
+        "2026-10-11T04:26:51.500685+00:00",
+        "2026-10-11T05:27:08.624724+00:00",
+        "2026-10-11T05:27:25.903240+00:00"
+      ],
+      "pinned_recreated": [
+        "2026-10-13T01:33:00.587768+00:00"
+      ],
+      "report_completed": [
+        "2026-10-17T00:42:46.575317+00:00",
+        "2026-10-17T01:42:51.270673+00:00",
+        "2026-10-17T02:43:13.692490+00:00",
+        "2026-10-17T03:43:18.122461+00:00",
+        "2026-10-17T04:43:22.932823+00:00",
+        "2026-10-17T05:43:27.285764+00:00",
+        "2026-10-17T06:43:32.390027+00:00",
+        "2026-10-17T07:43:37.177640+00:00"
+      ],
+      "report_started": [
+        "2026-10-17T00:42:42.270012+00:00",
+        "2026-10-17T01:42:46.576876+00:00",
+        "2026-10-17T02:42:51.277825+00:00",
+        "2026-10-17T03:43:13.696850+00:00",
+        "2026-10-17T04:43:18.124724+00:00",
+        "2026-10-17T05:43:22.936942+00:00",
+        "2026-10-17T06:43:27.290008+00:00",
+        "2026-10-17T07:43:32.396770+00:00"
+      ],
+      "telegram_connection_failure": [
+        "2026-10-16T01:10:57.812647+00:00",
+        "2026-10-16T01:11:00.102017+00:00",
+        "2026-10-17T01:10:53.407904+00:00",
+        "2026-10-17T01:10:54.417017+00:00",
+        "2026-10-17T01:10:55.819590+00:00",
+        "2026-10-17T01:10:57.537212+00:00",
+        "2026-10-17T01:10:59.659838+00:00",
+        "2026-10-17T01:11:02.536310+00:00"
+      ],
+      "telegram_rate_limit": [
+        "2026-10-14T01:10:49.611638+00:00",
+        "2026-10-14T01:10:49.611638+00:00",
+        "2026-10-15T01:10:47.434286+00:00",
+        "2026-10-15T01:10:47.434286+00:00",
+        "2026-10-15T01:10:48.454307+00:00",
+        "2026-10-15T01:10:48.454307+00:00",
+        "2026-10-15T01:10:49.760441+00:00",
+        "2026-10-15T01:10:49.760441+00:00"
+      ]
+    },
+    "records_scanned": 2294
+  },
+  "sha256": {
+    "deploy.sh": "c1886ca6fd8faff285a02ea56349d454b3fc853561b10e04bcaae264fb8c8dd9",
+    "install.sh": "34fe62fa8a3be54d3e948a40dcef0cb6d1123f9f0c2b38b662f18b63d672cd3d",
+    "main.py": "2b6108f7186b0f85fa9d92b568724a17e151520ba580ac6ee5fa6a0960cae70e",
+    "requirements.txt": "621fa06ffe449634cac5488e3fdc98c4738af919673d8384f93e1f9f93b5f4a0",
+    "scripts/test_abcex.py": "1831bf459334d4bcbc6c5e55975029a80a28c9a8b3267a7ae7892434ce79e96b",
+    "scripts/test_antarctic.py": "8f6371e84545cef7a0f20bed4cb70f98cc176a054829d65114a1ce5602a9017d",
+    "scripts/test_antarctic_refresh.py": "28727e34e6e9f9fe6e91846e91b4ce2138b078f7d838574acbe7c99dd1eae8e3",
+    "scripts/test_uniswap_owb.py": "9f3cc8073bd6b7a5ca8e5f7425f47d77faa3607f4fdf4f8cf010b50b13cbf1e2",
+    "src/__init__.py": "b95dc82ca1648e9c54677c391d2f62e5dc672fe80620c141cd3f7a9523844d73",
+    "src/config.py": "d024fe91acde0ac81f155aeaa37128093caa41efcc4d75bac37b26b1fc4632a6",
+    "src/domain/__init__.py": "f608555461302ff49b400fd735bab87dc2f66bf921f4b0a8389d48be1b83860d",
+    "src/domain/models.py": "a3bcdb45956108622fd2b74632b9c632c3127fd32c7a4a3d0bd9a12748859295",
+    "src/handlers/__init__.py": "fcf233a666c0442dd0d9b364521bc25ac81edc804164250b254ea190575455f3",
+    "src/handlers/admin.py": "815f989d62b2383b88e5cd0f7883f2a53f05e61861aa136526e61d380393e3fe",
+    "src/handlers/user.py": "1418ec85779b5ec6c7f40d04dc1c487311538bb1b5c1038a09ad8c5243609eaf",
+    "src/keyboards/__init__.py": "fb20ea24df780c08b5243ea1b6881a6fba15f32f8a482555e76e3b6e21b69021",
+    "src/keyboards/menus.py": "cd51512d9fa502487878d90fbdc6eb8dedb102ddde67010ac5dfc48bb35c2782",
+    "src/services/__init__.py": "09c1a5a35657fc1644b41df919c35cbfaf4328d66605695c5f0efd6c6967e7a1",
+    "src/services/abcex.py": "be1328496e0e3f08efb3e77f8c5ed0ec5a663d5ac656c6c5de9d8624ac9805e4",
+    "src/services/antarctic.py": "4b207d5a2bea9027e563e2a6476104d71e6bc361abc1e7a5c909f8c0237b5252",
+    "src/services/bestchange.py": "772bce3224e1a2de7ac0283800936116e066ec5dad3d838d66d3cf3e82610797",
+    "src/services/bybit_p2p.py": "39d2dfb1e5987596ee66a563b292521e28e32cad695a1cdc3ff19edaf97c6e65",
+    "src/services/cbrf.py": "9b0683eaf6562f2c3ce38672e1a3242bd03197889a7cf2f346168945041dac5a",
+    "src/services/uniswap.py": "4364c86fbb2403dd03f396286436a404ad333616454c90bdd0d003db29efb568",
+    "src/utils/__init__.py": "b5540d6d3452cf489a8da2ab1ba9767383c0602f0423c032dfa95a92e052d629",
+    "src/utils/commands.py": "72923cabeeaab0857388e3fada8ec815f6d83fb7c3ffa39ec8e385f36084c057",
+    "src/utils/retry.py": "6b17f94a67463378175df343e9b2232044e295201bd5d8bc23da649b3475fe12",
+    "src/utils/storage.py": "68cc4a3d38f5445b7054e009f669fb9b178034932280129ede256b9462609cf7",
+    "tests/test_regressions.py": "8f9bd24509d34edd6ff67859fed4eef439e8f5c1d918dfa8db7a810e7ca3454f",
+    "tests/test_runtime_hardening.py": "82ed1c3ccf3bf0d1f6b1633b72794ca8aacd6260d244add7f6e26953526a3df9"
+  }
+}
