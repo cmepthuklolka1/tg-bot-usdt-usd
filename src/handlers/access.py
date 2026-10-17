@@ -13,6 +13,12 @@ class AccessMiddleware(BaseMiddleware):
         self.allowed = allowed or WhitelistStorage().is_allowed
 
     async def __call__(self, handler, event, data):
+        # Pin notices can be sent by the bot itself. They are service events,
+        # so authorize cleanup by the private chat, without changing user FSM.
+        if isinstance(event, Message) and event.pinned_message is not None:
+            if not self.admin_only and event.chat.type == "private" and self.allowed(event.chat.id):
+                return await handler(event, data)
+            return
         user = getattr(event, "from_user", None)
         allowed = user is not None and (user.id == config.admin_id if self.admin_only else self.allowed(user.id))
         if not allowed:
