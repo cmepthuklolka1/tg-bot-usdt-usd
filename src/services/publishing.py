@@ -19,33 +19,45 @@ class ReportPublisher:
         self._retry_at = {}
         self._pending = {}
 
-    async def update(self, bot, chat_id, text, *, verify_pin=False):
+    async def _pin_report(self, bot, chat_id, message_id, previous_id):
+        await bot.pin_chat_message(chat_id=chat_id, message_id=message_id, disable_notification=True)
+        self.storage.set_pinned(chat_id, message_id)
+        self._pending.pop(chat_id, None)
+        if previous_id and previous_id != message_id:
+            try:
+                await bot.unpin_chat_message(chat_id=chat_id, message_id=previous_id)
+            except Exception as error:
+                # The new report is already visible, pinned and persisted.
+                logger.warning("source=telegram event=previous_pin_cleanup_deferred error_kind=%s", type(error).__name__)
+
+    async def update(self, bot, chat_id, text, *, verify_pin=False, message_id=None):
         async with self._locks.setdefault(chat_id, asyncio.Lock()):
             if time.monotonic() < self._retry_at.get(chat_id, 0):
                 return False
             try:
-                message_id = self.storage.get_all().get(str(chat_id))
-                if message_id:
+                previous_id = self.storage.get_all().get(str(chat_id))
+                target_id = message_id if message_id is not None else previous_id
+                if target_id:
                     try:
-                        await bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text,
+                        await bot.edit_message_text(chat_id=chat_id, message_id=target_id, text=text,
                                                     reply_markup=get_rates_keyboard(), parse_mode="HTML")
-                        if verify_pin:
+                    except TelegramBadRequest as error:
+                        reason = error.message.lower()
+                        if "message to edit not found" in reason:
+                            target_id = None
+                        elif "message is not modified" not in reason:
+                            raise
+                    if target_id:
+                        if target_id != previous_id:
+                            self._pending[chat_id] = target_id
+                            await self._pin_report(bot, chat_id, target_id, previous_id)
+                        elif verify_pin:
                             # Unknown pin state is never treated as a missing message.
                             chat = await bot.get_chat(chat_id)
                             actual = getattr(getattr(chat, "pinned_message", None), "message_id", None)
-                            if actual != message_id:
-                                await bot.pin_chat_message(chat_id=chat_id, message_id=message_id, disable_notification=True)
+                            if actual != target_id:
+                                await bot.pin_chat_message(chat_id=chat_id, message_id=target_id, disable_notification=True)
                         return True
-                    except TelegramBadRequest as error:
-                        reason = error.message.lower()
-                        if "message is not modified" in reason:
-                            if verify_pin:
-                                chat = await bot.get_chat(chat_id)
-                                if getattr(getattr(chat, "pinned_message", None), "message_id", None) != message_id:
-                                    await bot.pin_chat_message(chat_id=chat_id, message_id=message_id, disable_notification=True)
-                            return True
-                        if "message to edit not found" not in reason:
-                            raise
                 # Retain an unpinned draft after a transient pin failure. A later
                 # attempt pins this message rather than sending another duplicate.
                 pending_id = self._pending.get(chat_id)
@@ -63,9 +75,7 @@ class ReportPublisher:
                             self._pending.pop(chat_id, None)
                         if "message is not modified" not in error.message.lower():
                             raise
-                await bot.pin_chat_message(chat_id=chat_id, message_id=pending_id, disable_notification=True)
-                self.storage.set_pinned(chat_id, pending_id)
-                self._pending.pop(chat_id, None)
+                await self._pin_report(bot, chat_id, pending_id, previous_id)
                 return True
             except TelegramRetryAfter as error:
                 self._retry_at[chat_id] = time.monotonic() + error.retry_after

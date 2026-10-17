@@ -194,9 +194,18 @@ async def cmd_settings(message: Message, state: FSMContext):
 async def cb_show_rates(callback: CallbackQuery):
     await callback.answer("Обновляю курсы…")
     from ..services.publishing import publisher
-    text = await generate_rates_report(callback.from_user.id)
-    if not await publisher.update(callback.bot, callback.message.chat.id, text):
+    try:
+        text = await generate_rates_report(callback.from_user.id)
+        published = await publisher.update(callback.bot, callback.message.chat.id, text,
+                                           message_id=callback.message.message_id)
+    except Exception as error:
+        logger.warning("source=report_action error_kind=%s", type(error).__name__)
+        published = False
+    if not published:
         logger.warning("source=telegram event=report_update_deferred")
+        await callback.message.answer("⚠️ Не удалось завершить обновление курсов. Попробуйте ещё раз.")
+    else:
+        logger.info("source=telegram event=report_displayed action=%s", callback.data)
 
 
 # Keep a stable import for integrations calling the previous handler directly.
