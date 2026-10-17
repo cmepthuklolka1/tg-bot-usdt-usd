@@ -31,12 +31,12 @@ settings_storage = UserSettingsStorage()
 @router.message(F.content_type == ContentType.PINNED_MESSAGE)
 async def delete_pin_notification(message: Message):
     """Удаляет служебное сообщение 'закрепил сообщение'."""
-    logger.info("Pin notification received: chat=%s msg_id=%s", message.chat.id, message.message_id)
+    logger.info("source=telegram event=pin_notification_received")
     try:
         await message.delete()
-        logger.info("Pin notification deleted: msg_id=%s", message.message_id)
-    except Exception as e:
-        logger.warning("Failed to delete pin notification msg_id=%s: %s", message.message_id, e)
+        logger.info("source=telegram event=pin_notification_deleted")
+    except Exception as error:
+        logger.warning("source=telegram event=pin_notification_delete_failed error_kind=%s", type(error).__name__)
 
 EXCHANGE_LABELS = {
     "bestchange_1": "BestChange-1",
